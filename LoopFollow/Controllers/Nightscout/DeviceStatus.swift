@@ -7,7 +7,8 @@ import SwiftUI
 
 extension MainViewController {
     func webLoadNSDeviceStatus() {
-        let parameters = ["count": "1"]
+        // Recent loop cycles support a cautious, trend-based COB estimate.
+        let parameters = ["count": "12"]
         NightscoutUtils.executeDynamicRequest(eventType: .deviceStatus, parameters: parameters) { result in
             switch result {
             case let .success(json):
@@ -67,6 +68,9 @@ extension MainViewController {
     func updateDeviceStatusDisplay(jsonDeviceStatus: [[String: AnyObject]]) {
         let previousIOBText = Observable.shared.iobText.value
         let previousDeviceWasLoop = Storage.shared.device.value == "Loop"
+        latestIOB = nil
+        latestCOB = nil
+        recentCOBSamples = BoardTimeDisplay.cobSamples(from: jsonDeviceStatus)
         infoManager.clearInfoData(types: [.iob, .cob, .battery, .pump, .pumpBattery, .target, .isf, .carbRatio, .updated, .recBolus, .tdd])
 
         // For Loop, clear the current override here - For Trio, it is handled using treatments
@@ -203,6 +207,7 @@ extension MainViewController {
         if let lastLoopRecord = lastDeviceStatus?["openaps"] as! [String: AnyObject]? {
             DeviceStatusOpenAPS(formatter: formatter, lastDeviceStatus: lastDeviceStatus, lastLoopRecord: lastLoopRecord)
         }
+        refreshBoardTimeEstimates()
 
         // If the active looping system flipped (Loop ⇄ Trio/OpenAPS), drop the previous
         // system's forecast so it doesn't linger next to the one just drawn above.
