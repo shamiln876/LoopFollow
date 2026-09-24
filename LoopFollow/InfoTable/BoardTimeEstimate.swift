@@ -24,9 +24,10 @@ enum BoardTimeEstimate {
     /// Time until the modeled *bolus + SMB* remainder falls below 0.05 U.
     /// Basal deviations are part of Trio's IOB but are not available as doses here.
     static func insulinEnd(doses: [Dose], now: Date) -> Date? {
-        let active = doses.filter { $0.units > 0 && $0.units.isFinite &&
-            now.timeIntervalSince($0.date) >= -60 &&
-            now.timeIntervalSince($0.date) < insulinDurationMinutes * 60 }
+        let active = doses.filter { dose in
+            let age = now.timeIntervalSince(dose.date)
+            return dose.units > 0 && dose.units.isFinite && age >= -60 && age < insulinDurationMinutes * 60
+        }
         guard !active.isEmpty else { return nil }
         for minutes in stride(from: 0, through: Int(insulinDurationMinutes), by: 1) {
             let date = now.addingTimeInterval(Double(minutes) * 60)

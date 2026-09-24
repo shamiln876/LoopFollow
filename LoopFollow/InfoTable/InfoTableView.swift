@@ -16,15 +16,17 @@ struct InfoTableView: View {
                 row(name: "Time Zone", value: tz)
             }
             ForEach(infoManager.visibleRows) { item in
-                if (item.id == InfoType.iob.rawValue || item.id == InfoType.cob.rawValue),
-                   item.numericValue != nil {
+                if item.id == InfoType.iob.rawValue || item.id == InfoType.cob.rawValue,
+                   item.numericValue != nil
+                {
                     TimelineView(.periodic(from: .now, by: 60)) { context in
                         VStack(spacing: 0) {
                             rowContent(name: item.name, value: item.value, valueColor: color(for: item))
                             if let end = item.estimatedEnd,
                                let updated = item.estimateUpdatedAt,
                                context.date.timeIntervalSince(updated) < 15 * 60,
-                               end > context.date {
+                               end > context.date
+                            {
                                 let remaining = Int(ceil(end.timeIntervalSince(context.date) / 60))
                                 let icon = item.id == InfoType.iob.rawValue ? "syringe" : "fork.knife"
                                 let label = item.id == InfoType.iob.rawValue ? "bolus tail" : "COB trend"

@@ -6,13 +6,14 @@ import Foundation
 enum BoardTimeDisplay {
     static func cobSamples(from statuses: [[String: AnyObject]]) -> [BoardTimeEstimate.CarbSample] {
         statuses.compactMap { status in
-            guard let openaps = status["openaps"] as? [String: AnyObject],
-                  let cycle = (openaps["suggested"] as? [String: AnyObject]) ??
-                    (openaps["enacted"] as? [String: AnyObject]),
+            guard let openaps = status["openaps"] as? [String: AnyObject] else { return nil }
+            let suggested = openaps["suggested"] as? [String: AnyObject]
+            let enacted = openaps["enacted"] as? [String: AnyObject]
+            guard let cycle = suggested ?? enacted,
                   let grams = (cycle["COB"] as? Double) ?? (cycle["cob"] as? Double),
-                  let timestamp = (cycle["deliverAt"] as? String) ??
-                    (cycle["timestamp"] as? String),
-                  let date = NightscoutUtils.parseDate(timestamp) else { return nil }
+                  let timestamp = (cycle["deliverAt"] as? String) ?? (cycle["timestamp"] as? String),
+                  let date = NightscoutUtils.parseDate(timestamp)
+            else { return nil }
             return BoardTimeEstimate.CarbSample(grams: grams, date: date)
         }
     }
@@ -28,7 +29,8 @@ extension MainViewController {
         )
         // Don't show timers on a stale loop or for Loop's different insulin model.
         guard Storage.shared.device.value != "Loop",
-              lastLoopTime > 0, now.timeIntervalSince1970 - lastLoopTime < 15 * 60 else {
+              lastLoopTime > 0, now.timeIntervalSince1970 - lastLoopTime < 15 * 60
+        else {
             infoManager.updateEstimatedEnd(type: .iob, end: nil, updatedAt: now)
             infoManager.updateEstimatedEnd(type: .cob, end: nil, updatedAt: now)
             return
