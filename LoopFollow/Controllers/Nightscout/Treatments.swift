@@ -191,5 +191,6 @@ extension MainViewController {
             }
         }
         processCage(entries: pumpSiteChange)
+        refreshBoardTimeEstimates()
     }
 }

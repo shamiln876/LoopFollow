@@ -1,0 +1,23 @@
+name: Compile LoopFollow pull request
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  simulator-build:
+    runs-on: macos-26
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode
+        run: sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
+      - name: Build for iOS Simulator
+        run: |
+          xcodebuild -workspace LoopFollow.xcworkspace \
+            -scheme LoopFollow \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build

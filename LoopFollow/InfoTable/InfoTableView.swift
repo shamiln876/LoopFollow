@@ -16,7 +16,32 @@ struct InfoTableView: View {
                 row(name: "Time Zone", value: tz)
             }
             ForEach(infoManager.visibleRows) { item in
-                row(name: item.name, value: item.value, valueColor: color(for: item))
+                if item.id == InfoType.iob.rawValue || item.id == InfoType.cob.rawValue,
+                   item.numericValue != nil
+                {
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        VStack(spacing: 0) {
+                            rowContent(name: item.name, value: item.value, valueColor: color(for: item))
+                            if let end = item.estimatedEnd,
+                               let updated = item.estimateUpdatedAt,
+                               context.date.timeIntervalSince(updated) < 15 * 60,
+                               end > context.date
+                            {
+                                let remaining = Int(ceil(end.timeIntervalSince(context.date) / 60))
+                                let icon = item.id == InfoType.iob.rawValue ? "syringe" : "fork.knife"
+                                let label = item.id == InfoType.iob.rawValue ? "bolus tail" : "COB trend"
+                                Label("~\(remaining / 60)h \(remaining % 60)m \(label)", systemImage: icon)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
+                            }
+                        }
+                        .frame(minHeight: rowHeight)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                    }
+                } else {
+                    row(name: item.name, value: item.value, valueColor: color(for: item))
+                }
             }
         }
         .listStyle(.plain)
@@ -34,6 +59,12 @@ struct InfoTableView: View {
     }
 
     private func row(name: String, value: String, valueColor: Color? = nil) -> some View {
+        rowContent(name: name, value: value, valueColor: valueColor)
+            .frame(minHeight: rowHeight)
+            .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+    }
+
+    private func rowContent(name: String, value: String, valueColor: Color? = nil) -> some View {
         // Show a placeholder for any field that has no value yet,
         // so the row reads as "no data" rather than appearing empty.
         let displayValue = value.isEmpty ? "—" : value
@@ -58,7 +89,5 @@ struct InfoTableView: View {
         .font(.system(size: fontSize))
         .lineLimit(1)
         .minimumScaleFactor(0.5)
-        .frame(minHeight: rowHeight)
-        .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
     }
 }

@@ -10,6 +10,8 @@ class InfoData: Identifiable {
     /// Raw numeric value behind `value`, when the row carries a single number.
     /// Used for threshold-based coloring; `nil` for text or combined values.
     var numericValue: Double?
+    var estimatedEnd: Date?
+    var estimateUpdatedAt: Date?
 
     init(id: Int, name: String, value: String = "", numericValue: Double? = nil) {
         self.id = id
