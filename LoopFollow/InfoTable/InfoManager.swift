@@ -56,6 +56,8 @@ class InfoManager: ObservableObject {
     func clearInfoData(type: InfoType) {
         tableData[type.rawValue].value = ""
         tableData[type.rawValue].numericValue = nil
+        tableData[type.rawValue].estimatedEnd = nil
+        tableData[type.rawValue].estimateUpdatedAt = nil
         objectWillChange.send()
     }
 
@@ -63,7 +65,16 @@ class InfoManager: ObservableObject {
         for type in types {
             tableData[type.rawValue].value = ""
             tableData[type.rawValue].numericValue = nil
+            tableData[type.rawValue].estimatedEnd = nil
+            tableData[type.rawValue].estimateUpdatedAt = nil
         }
+        objectWillChange.send()
+    }
+
+    func updateEstimatedEnd(type: InfoType, end: Date?, updatedAt: Date) {
+        guard type == .iob || type == .cob else { return }
+        tableData[type.rawValue].estimatedEnd = end
+        tableData[type.rawValue].estimateUpdatedAt = updatedAt
         objectWillChange.send()
     }
 
