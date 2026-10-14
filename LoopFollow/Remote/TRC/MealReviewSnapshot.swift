@@ -1,5 +1,8 @@
-import Foundation
+// LoopFollow
+// MealReviewSnapshot.swift
+
 import CoreFoundation
+import Foundation
 
 /// A single OpenAPS record, never a mixture of cached values from different cycles.
 struct MealReviewSnapshot {
@@ -25,7 +28,7 @@ struct MealReviewSnapshot {
     static func parse(_ record: [String: AnyObject], profileRatio: Double?) -> MealReviewSnapshot? {
         guard record["failureReason"] == nil,
               let calculation = record["suggested"] as? [String: AnyObject]
-                ?? record["enacted"] as? [String: AnyObject] else { return nil }
+              ?? record["enacted"] as? [String: AnyObject] else { return nil }
         func date(_ raw: Any?) -> Date? {
             guard let raw = raw as? String else { return nil }
             let formatter = ISO8601DateFormatter()

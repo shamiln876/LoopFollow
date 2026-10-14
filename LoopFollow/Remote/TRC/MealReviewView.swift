@@ -1,3 +1,6 @@
+// LoopFollow
+// MealReviewView.swift
+
 import HealthKit
 import SwiftUI
 
@@ -41,7 +44,8 @@ struct MealReviewView: View {
                     }
                     Section("Carb-ratio arithmetic") {
                         if let carbs = Double(carbText.replacingOccurrences(of: ",", with: ".")),
-                           let units = snapshot.value?.carbEquivalent(carbs: carbs, glucose: glucose.value.map(Double.init), glucoseDate: glucoseDate, now: context.date), trendAvailable, !falling {
+                           let units = snapshot.value?.carbEquivalent(carbs: carbs, glucose: glucose.value.map(Double.init), glucoseDate: glucoseDate, now: context.date), trendAvailable, !falling
+                        {
                             row("Carbs ÷ ratio", String(format: "%.2f U", units))
                         } else {
                             Text("Arithmetic unavailable: enter positive carbs and wait for complete, fresh data with glucose at least 70 mg/dL and no falling trend.")
@@ -73,6 +77,7 @@ struct MealReviewView: View {
     private func row(_ label: String, _ value: String) -> some View {
         HStack { Text(label); Spacer(); Text(value).foregroundStyle(.secondary).multilineTextAlignment(.trailing) }
     }
+
     private func warning(_ text: String) -> some View { Label(text, systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
     private func age(_ date: Date?, now: Date) -> String {
         guard let date else { return "Unavailable" }
