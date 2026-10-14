@@ -7,6 +7,7 @@ import SwiftUI
 
 struct MealView: View {
     @Environment(\.presentationMode) private var presentationMode
+    @State private var showMealReview = false
     @State private var carbs = HKQuantity(unit: .gram(), doubleValue: 0.0)
     @State private var protein = HKQuantity(unit: .gram(), doubleValue: 0.0)
     @State private var fat = HKQuantity(unit: .gram(), doubleValue: 0.0)
@@ -47,6 +48,9 @@ struct MealView: View {
         NavigationView {
             VStack {
                 Form {
+                    Section {
+                        Button("Smart Meal Advisor · Read-only") { showMealReview = true }
+                    }
                     if !quickPickMeals.quickPickMeals.isEmpty {
                         Section(header: QuickPickSectionHeader(title: "Quick-Pick Meals", infoText: QuickPickSectionHeader.mealInfoText)) {
                             ScrollView(.horizontal, showsIndicators: false) {
@@ -216,6 +220,9 @@ struct MealView: View {
                 }
                 .navigationTitle("Meal")
                 .navigationBarTitleDisplayMode(.inline)
+            }
+            .sheet(isPresented: $showMealReview) {
+                MealReviewView(initialCarbs: carbs.doubleValue(for: .gram()))
             }
             .onAppear {
                 selectedTime = nil

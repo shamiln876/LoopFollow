@@ -177,6 +177,9 @@ extension MainViewController {
             }
         }
 
+        // Clear the advisor when the current source is no longer OpenAPS.
+        if lastDeviceStatus?["openaps"] == nil { Observable.shared.mealReview.value = nil }
+
         // Loop - handle new data
         if let lastLoopRecord = lastDeviceStatus?["loop"] as! [String: AnyObject]? {
             // Some pumps report no `pump.clock`; without it alertLastLoopTime stays 0
