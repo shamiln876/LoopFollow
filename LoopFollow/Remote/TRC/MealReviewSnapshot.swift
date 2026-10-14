@@ -12,6 +12,17 @@ struct MealReviewSnapshot {
     let iob: Double?
     let iobDate: Date?
     let cob: Double?
+    var effectiveISF: Double? = nil // Canonical mg/dL/U; never silently use scheduled ISF.
+    var isfSource = "Unavailable"
+    var targetMgdl: Double? = nil
+    var activity: Double? = nil // U/min, already computed using Trio's insulin curve.
+    var nativeRecommendation: Double? = nil // Trio calculates this with ZERO new carbs.
+    var minPredMgdl: Double? = nil
+    var minGuardMgdl: Double? = nil
+    var predictions: [String: [Double]] = [:]
+    var trioVersion: String? = nil
+    var uploadUnitSource = "Unavailable"
+    var calculationIOB: Double? = nil
 
     enum TrendNotice {
         case downwardArrow
@@ -40,7 +51,7 @@ struct MealReviewSnapshot {
         return value.doubleValue
     }
 
-    static func parse(_ record: [String: AnyObject], profileRatio: Double?) -> MealReviewSnapshot? {
+    static func parse(_ record: [String: AnyObject], profileRatio: Double?, profileUnits: String? = nil) -> MealReviewSnapshot? {
         guard record["failureReason"] == nil,
               let calculation = record["suggested"] as? [String: AnyObject]
               ?? record["enacted"] as? [String: AnyObject] else { return nil }
@@ -60,10 +71,62 @@ struct MealReviewSnapshot {
         let insulin = record["iob"] as? [String: AnyObject]
         let cycleDate = date(calculation["timestamp"]) ?? date(calculation["deliverAt"])
         let cob = number(calculation["COB"]) ?? reasonNumber("COB")
-        return MealReviewSnapshot(date: cycleDate, carbRatio: ratio,
-                                  ratioSource: reported == nil ? "Scheduled profile fallback" : "Trio reported",
-                                  iob: number(insulin?["iob"]), iobDate: date(insulin?["time"]) ?? date(insulin?["timestamp"]),
-                                  cob: cob.flatMap { $0 >= 0 ? $0 : nil })
+        var snapshot = MealReviewSnapshot(date: cycleDate, carbRatio: ratio,
+                                          ratioSource: reported == nil ? "Scheduled profile fallback" : "Trio reported",
+                                          iob: number(insulin?["iob"]), iobDate: date(insulin?["time"]) ?? date(insulin?["timestamp"]),
+                                          cob: cob.flatMap { $0 >= 0 ? $0 : nil })
+        let sourceVersion = record["version"] as? String
+        let factor: Double? = {
+            guard sourceVersion == "1.0.2" else { return nil }
+            // NightscoutManager stores lastSuggestedDetermination BEFORE its
+            // display-unit conversion and timestamp injection. On an enacted
+            // upload the cached suggestion therefore remains in mg/dL. Require
+            // its original deliverAt, rather than guessing units from magnitude.
+            if record["suggested"] as? [String: AnyObject] != nil, calculation["timestamp"] == nil, date(calculation["deliverAt"]) != nil { return 1 }
+            switch profileUnits?.lowercased() {
+            case "mg/dl": return 1
+            case "mmol", "mmol/l": return 18.01559
+            default: return nil
+            }
+        }()
+        func glucoseField(_ name: String, positiveOnly: Bool = true) -> Double? {
+            guard let factor, let raw = number(calculation[name]), !positiveOnly || raw > 0 else { return nil }
+            return raw * factor
+        }
+        func reasonGlucose(_ name: String, positiveOnly: Bool = true) -> Double? {
+            guard let factor, let reason = calculation["reason"] as? String,
+                  let regex = try? NSRegularExpression(pattern: "\\b" + name + ":?\\s+(-?[0-9]+(?:\\.[0-9]+)?(?:→-?[0-9]+(?:\\.[0-9]+)?)*)"),
+                  let match = regex.firstMatch(in: reason, range: NSRange(location: 0, length: reason.utf16.count)),
+                  let raw = Double((reason as NSString).substring(with: match.range(at: 1)).split(separator: "→").last ?? ""), !positiveOnly || raw > 0 else { return nil }
+            if name == "ISF", factor != 1, !(reason as NSString).substring(with: match.range(at: 1)).contains("→") { return nil }
+            return raw * factor
+        }
+        // Trio only converts target, min-prediction fields and reason to display
+        // units during upload; structured ISF and prediction arrays stay in mg/dL.
+        snapshot.effectiveISF = number(calculation["ISF"]).flatMap { $0 > 0 ? $0 : nil }
+        if snapshot.effectiveISF != nil { snapshot.isfSource = "Trio structured effective ISF" }
+        else if let parsed = reasonGlucose("ISF") {
+            snapshot.effectiveISF = parsed
+            snapshot.isfSource = "Trio reason (rounded)"
+        }
+        snapshot.targetMgdl = glucoseField("current_target") ?? reasonGlucose("Target")
+        snapshot.minPredMgdl = glucoseField("minPredBG", positiveOnly: false) ?? reasonGlucose("minPredBG", positiveOnly: false)
+        snapshot.minGuardMgdl = glucoseField("minGuardBG", positiveOnly: false) ?? reasonGlucose("minGuardBG", positiveOnly: false)
+        snapshot.activity = number(insulin?["activity"])
+        snapshot.calculationIOB = number(calculation["IOB"])
+        snapshot.nativeRecommendation = number(record["recommendedBolus"]).flatMap { $0 >= 0 ? $0 : nil }
+        snapshot.trioVersion = record["version"] as? String
+        if let factor { snapshot.uploadUnitSource = factor == 1 ? "Trio mg/dL fields" : "Trio mmol/L fields" }
+        if let predictions = calculation["predBGs"] as? [String: Any] {
+            for name in ["IOB", "COB", "UAM", "ZT"] {
+                if let rawValues = predictions[name] as? [Any], !rawValues.isEmpty {
+                    let values = rawValues.compactMap(Self.number)
+                    guard values.count == rawValues.count, values.allSatisfy({ $0 > 0 }) else { continue }
+                    snapshot.predictions[name] = Array(values.prefix(288))
+                }
+            }
+        }
+        return snapshot
     }
 
     /// Educational carb/ratio arithmetic only. Never a deliverable bolus recommendation.

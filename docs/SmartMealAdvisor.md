@@ -1,52 +1,17 @@
-# Smart Meal Advisor — read-only test
+# Smart Meal Advisor test build
 
-Open the existing Meal screen and tap **Smart Meal Advisor · Read-only**.
-The advisor has its own carb input, initially copied from the Meal screen. Closing
-it does not write back to the meal, bolus, quick picks, or remote command layer.
-There is no send, accept, or deliver action in the advisor.
+Open Meal → Smart Meal Advisor and enter the hypothetical new meal carbs. The review updates from the current glucose history and latest Trio upload. It cannot log carbs, prefill a bolus, or send insulin. The existing Meal and Bolus actions are separate.
 
-## Data
+The displayed **net model balance** combines new meal carbs, existing COB, glucose relative to target, recent glucose change, and remaining net IOB. It is **before** maximum COB, Recommended Bolus Percentage, maximum bolus, maximum IOB and pump rounding. It is not a finalized dose. Missing patient settings are never replaced with defaults.
 
-The advisor consumes a single in-memory OpenAPS suggested record (enacted when
-suggested is absent), its matching IOB object and the current glucose stream.
-It does not reuse the persistent last-IOB/COB/CR caches. Missing values remain
-missing on each update, and failed or non-OpenAPS records clear its snapshot.
+The calculation follows the component arithmetic in the user's Trio 1.0.2 `BolusCalculationManager`: existing COB uses whole grams, the glucose change is newest minus oldest within the preceding 20-minute window, and negative IOB represents insulin below scheduled basal. Other Trio versions hold the integrated review until their upload and calculation behavior have been checked.
 
-CR uses a positive structured value, then a CR reason-string field, then the
-current scheduled Nightscout profile ratio. The fallback is explicitly labeled
-and warns that it may not reflect an active override. IOB requires its own `time`
-or `timestamp`; COB uses the calculation timestamp. ISO timestamps with and
-without fractional seconds are accepted.
+IOB already includes the configured insulin-action curve and elapsed time. Current net activity (U/min) is shown separately, with the modeled five-minute effect `−activity × effective ISF × 5`. This effect is relative to scheduled basal and excludes food and other influences. It must not be interpreted as an observed or guaranteed glucose fall. IOB is not discounted again.
 
-The only numeric result is entered carbs / CR. This is labeled **carb-only insulin
-equivalent**, never a dose recommendation. There is no correction, IOB subtraction,
-COB subtraction, SMB forecast, or delay/absorption model. The screen shows the specific reason when arithmetic is on hold. It is hidden with missing
-IOB/COB/CR/glucose timestamps, records older than ten minutes, timestamps more than
-one minute ahead, glucose below 70 mg/dL. Glucose trends do not change this carb-only reference; negative changes, downward arrows, or missing trends are review warnings.
-The sensor arrow and change since the previous reading are displayed separately. A Flat arrow with a negative change shows the reference with a notice; the wording identifies the negative change rather than implying a rapid fall. Current IOB is displayed beside the result and explicitly not subtracted. The result/hold reason sits directly below the labeled carb input, with Hide keyboard controls and a separate Close button. Glucose values and thresholds use the selected display unit.
+Uploaded IOB, COB, UAM and ZT forecast curves are displayed as **before the new meal**. No new-meal absorption curve, future SMB simulation or individualized physiological validation is implied. Selected minimum and guard values are checked separately; an IOB-only curve minimum is not substituted for the selected prediction.
 
-Ten minutes is a prototype freshness policy, not a claim of clinical validation.
+The integrated balance holds for missing or stale data (10 minutes), unmatched cycle/IOB times, mismatched calculation/current IOB, new known treatments after the snapshot, missing trend history, unknown upload units/version, low current glucose, or a low selected/guard prediction. The prediction hold at 70 mg/dL is a conservative review restriction, not a change to Trio's settings. Negative selected predictions remain negative rather than being treated as missing.
 
-Trio IOB is modeled active insulin above or below scheduled basal; a zero or
-negative net IOB must not be interpreted as absence of all circulating insulin.
-COB is a model estimate. All remote bolus and meal sending code is unchanged.
+Trio's uploader converts target and reason glucose fields to display units but leaves structured ISF and forecast arrays in mg/dL. Its cached suggestion can be uploaded without conversion or timestamp injection. The parser distinguishes that verified source path by version, missing injected timestamp and original deliverAt; it does not infer units from numeric magnitude.
 
-Clinical terminology references:
-- https://triodocs.org/configuration/new-user-setup/
-- https://diabetes.org/living-with-diabetes/hypoglycemia-low-blood-glucose
-
-## Validation and distribution
-
-Focused parsing/freshness tests live in `Tests/MealReviewSnapshotTests.swift`.
-Local build logs and test results are in ignored `build-review/`.
-Compilation and software tests do not validate dose selection for a patient.
-No live delivery has been tested or initiated by the advisor.
-
-The existing TestFlight workflow now skips upstream synchronization for `feature/`
-branches, since the custom branch does not exist in the upstream project. Main's
-sync behavior is unchanged. Use **4. Build LoopFollow** on the feature branch after
-publication. Distribution still requires working repository secrets and Apple
-signing; a successful simulator or unsigned iPhone build is not installable on an
-iPhone. This workflow uses the existing app identifier, so the TestFlight build
-updates that LoopFollow app rather than creating an independently installed app.
-It does not install or modify Trio.
+Software tests and historical parser/component replay establish implementation behavior, not clinical dosing validity. Finalized meal-dose use and any calculated-dose delivery handoff remain unavailable until the actual patient settings, source parity and appropriate validation are established.

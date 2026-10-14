@@ -1,115 +1,67 @@
 // LoopFollow
 // MealReviewView.swift
 
+import Charts
+import Combine
 import HealthKit
 import SwiftUI
 
 struct MealReviewView: View {
     let initialCarbs: Double
     @Environment(\.dismiss) private var dismiss
-    @State private var carbText = ""
+    @State private var carbText: String
+    @State private var now = Date()
     @FocusState private var carbsFocused: Bool
     @ObservedObject private var snapshot = Observable.shared.mealReview
-    @ObservedObject private var glucose = Observable.shared.bg
-    @ObservedObject private var glucoseTime = Storage.shared.lastBgReadingTimeSeconds
-    @ObservedObject private var delta = Storage.shared.lastDeltaMgdl
+    @ObservedObject private var history = Observable.shared.mealReviewGlucose
+    @ObservedObject private var newestTreatment = Observable.shared.mealReviewNewestTreatment
     @ObservedObject private var trend = Storage.shared.lastTrendCode
 
-    private var glucoseDate: Date? { glucoseTime.value.map { Date(timeIntervalSince1970: $0) } }
-    private var carbs: Double? { Double(carbText.replacingOccurrences(of: ",", with: ".")) }
-    private var trendNotice: MealReviewSnapshot.TrendNotice? { MealReviewSnapshot.trendNotice(delta: delta.value, trend: trend.value) }
-    private var changeText: String {
-        guard let change = delta.value, change.isFinite else { return "Unavailable" }
-        return (change > 0 ? "+" : change < 0 ? "−" : "") + displayGlucose(abs(change))
+    init(initialCarbs: Double) {
+        self.initialCarbs = initialCarbs
+        _carbText = State(initialValue: initialCarbs.isFinite && initialCarbs > 0 ? String(format: "%.1f", initialCarbs) : "")
     }
 
-    private var trendNoticeMessage: String? {
-        switch trendNotice {
-        case .downwardArrow: return "The sensor arrow is downward. The carb-only reference does not account for this trend."
-        case .negativeChange: return "Glucose changed by \(changeText) since the previous reading; sensor arrow: \(trend.value ?? "unavailable"). This change is not used to adjust the carb-only reference."
-        case .unavailable: return "Glucose trend is unavailable. The reference calculation does not assess glucose trajectory."
-        case nil: return nil
-        }
-    }
+    private var carbs: Double? { Double(carbText.replacingOccurrences(of: ",", with: ".")) }
 
     private func blockers(now: Date) -> [String] {
-        var reasons: [String] = []
-        if carbs.map({ $0.isFinite && $0 > 0 }) != true { reasons.append("Enter a positive carb amount.") }
-        if glucose.value == nil { reasons.append("Glucose is unavailable.") }
-        if !MealReviewSnapshot.fresh(glucoseDate, now: now) { reasons.append("Glucose timestamp is missing, over 10 minutes old, or in the future.") }
-        if let bg = glucose.value, bg < 70 { reasons.append("Glucose is below \(displayGlucose(70)). Follow the established hypoglycemia treatment plan before meal review.") }
-        if let snapshot = snapshot.value {
-            if !MealReviewSnapshot.fresh(snapshot.date, now: now) { reasons.append("Trio calculation timestamp is missing, over 10 minutes old, or in the future.") }
-            if snapshot.carbRatio == nil { reasons.append("Carb ratio is unavailable.") }
-            if let carbs, let ratio = snapshot.carbRatio, !(carbs / ratio).isFinite { reasons.append("Carbs and ratio do not produce a finite calculation.") }
-            if snapshot.iob == nil { reasons.append("IOB is unavailable; missing IOB is not zero.") }
-            if !MealReviewSnapshot.fresh(snapshot.iobDate, now: now) { reasons.append("IOB timestamp is missing, over 10 minutes old, or in the future.") }
-            if snapshot.cob == nil { reasons.append("COB is unavailable; missing COB is not zero.") }
-        } else { reasons.append("A successful Trio calculation is unavailable.") }
+        var reasons = MealReviewCalculation.reasons(snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
+        if carbs.map({ $0.isFinite && $0 > 0 }) != true { reasons.insert("Enter a positive carb amount.", at: 0) }
         return reasons
     }
 
     var body: some View {
         NavigationView {
-            TimelineView(.periodic(from: .now, by: 5)) { context in
-                Form {
-                    Section("Live meal calculator") {
-                        Text("Enter carbs. The calculation updates automatically. This screen cannot send carbs or insulin.")
-                        HStack {
-                            Text("Meal carbs (g)")
-                            TextField("Amount", text: $carbText)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .focused($carbsFocused)
-                                .accessibilityLabel("Meal carbs in grams")
-                        }
-                        if carbsFocused { Button("Hide keyboard") { carbsFocused = false } }
+            Form {
+                Section("Live meal review") {
+                    Text("Enter carbs to review. Values update automatically. This screen cannot send carbs or insulin.")
+                    HStack {
+                        Text("Meal carbs (g)")
+                        TextField("Amount", text: $carbText)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .focused($carbsFocused)
+                            .accessibilityLabel("Meal carbs in grams")
                     }
-                    Section("Carb-only reference") {
-                        if let carbs,
-                           let units = snapshot.value?.reviewEquivalent(carbs: carbs, glucose: glucose.value.map(Double.init), glucoseDate: glucoseDate, delta: delta.value, trend: trend.value, now: context.date)
-                        {
-                            HStack(alignment: .firstTextBaseline) {
-                                Text("Carbs ÷ ratio")
-                                Spacer()
-                                Text(String(format: "%.2f U", units))
-                                    .font(.title2.weight(.semibold))
-                                    .monospacedDigit()
-                            }
-                            if let ratio = snapshot.value?.carbRatio {
-                                Text(String(format: "%.1f g ÷ %.2f g/U", carbs, ratio)).font(.footnote).foregroundStyle(.secondary)
-                            }
-                        } else {
-                            Text("Calculation unavailable").font(.headline)
-                            ForEach(blockers(now: context.date), id: \.self) { reason in warning(reason) }
-                        }
-                        if let iob = snapshot.value?.iob { row("Current IOB (not subtracted)", String(format: "%.2f U", iob)).font(.subheadline) }
-                        Text("Reference only, not a dose to deliver. IOB and glucose corrections are not included.").font(.footnote)
-                        if let message = trendNoticeMessage { warning(message) }
+                    if carbsFocused { Button("Hide keyboard") { carbsFocused = false } }
+                }
+                balanceSection(now: now)
+                activitySection(now: now)
+                contextSection(now: now)
+                forecastSection(now: now)
+                Section("Before this can become a dose") {
+                    Text("The balance is before Trio's Recommended Bolus Percentage, maximum COB, maximum bolus, maximum IOB and pump rounding. These settings are not all available through Nightscout. A final meal dose cannot be verified yet.")
+                    if let s = snapshot.value, s.trioVersion == "1.0.2", let native = s.nativeRecommendation, MealReviewSnapshot.fresh(s.date, now: now) {
+                        row("Trio upload: zero new carbs", units(native))
+                        Text("This uploaded recommendation was calculated by Trio without the meal carbs entered above. It is not the recommendation for this meal.").font(.footnote)
                     }
-                    Section("Live context") {
-                        row("Glucose", glucose.value.map { displayGlucose(Double($0)) } ?? "Unavailable")
-                        row("Glucose age", age(glucoseDate, now: context.date))
-                        row("Sensor arrow", trend.value ?? "Unavailable")
-                        row("Change since previous reading", changeText)
-                        row("Carb ratio", snapshot.value?.carbRatio.map { String(format: "%.2f g/U", $0) } ?? "Unavailable")
-                        row("Ratio source", snapshot.value?.ratioSource ?? "Unavailable")
-                        row("Trio calculation age", age(snapshot.value?.date, now: context.date))
-                        row("IOB", snapshot.value?.iob.map { String(format: "%.2f U", $0) } ?? "Unavailable")
-                        row("IOB age", age(snapshot.value?.iobDate, now: context.date))
-                        row("COB", snapshot.value?.cob.map { String(format: "%.1f g", $0) } ?? "Unavailable")
-                    }
-                    Section("Review context") {
-                        if snapshot.value?.ratioSource == "Scheduled profile fallback" { warning("Trio did not report a valid ratio. The scheduled profile fallback may not reflect an active override.") }
-                        if let iob = snapshot.value?.iob, iob > 0 { warning("Trio reports \(String(format: "%.2f", iob)) U IOB. The carb-only arithmetic does not subtract it or account for additional SMBs.") }
-                        DisclosureGroup("What this review includes") {
-                            Text("This is a carb-only insulin equivalent, not a bolus recommendation. No correction or IOB subtraction is applied. Trio IOB is modeled active insulin above or below scheduled basal; COB is estimated unabsorbed carbohydrate. Future SMBs and delayed meal absorption are not modeled. Entries here do not change the Meal or Bolus screens.")
-                                .font(.footnote)
-                        }
+                    DisclosureGroup("What the model includes") {
+                        Text("New carbs and existing estimated COB are divided by Trio's active carb ratio. Glucose correction and recent glucose change use the reported effective ISF. Remaining net IOB is subtracted once. IOB and activity are relative to scheduled basal; negative values can represent a basal deficit. This review does not model absorption of the new meal, future SMBs, future ISF changes, or delivery that has not yet reached Nightscout. Uploaded predictions can be wrong. Entries here do not change the Meal or Bolus screens.")
+                            .font(.footnote)
                     }
                 }
-                .scrollDismissesKeyboard(.interactively)
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Smart Meal Advisor")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -120,13 +72,114 @@ struct MealReviewView: View {
                 }
             }
         }
-        .onAppear { carbText = initialCarbs > 0 ? String(format: "%.1f", initialCarbs) : "" }
+        .onAppear { now = Date() }
+        .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { now = $0 }
+    }
+
+    @ViewBuilder
+    private func balanceSection(now: Date) -> some View {
+        Section("Meal balance · review only") {
+            if blockers(now: now).isEmpty, let carbs,
+               let balance = MealReviewCalculation.review(newCarbs: carbs, snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
+            {
+                row("Net model balance", units(balance.total)).font(.title3.weight(.semibold))
+                Text("Not a dose to deliver. Percentage and limits have not been applied.").font(.footnote.weight(.semibold))
+                DisclosureGroup("Calculation breakdown") {
+                    row("New meal carbs", signedUnits(balance.newCarbUnits))
+                    row("Existing COB", signedUnits(balance.existingCarbUnits))
+                    row("Glucose relative to target", signedUnits(balance.correctionUnits))
+                    row("Recent glucose change", signedUnits(balance.trendUnits))
+                    row("Remaining net IOB", signedUnits(balance.iobCreditUnits))
+                }
+                if balance.total <= 0 { Text("The model balance is zero or negative before percentage and limits. This does not predict whether the new meal will cause a later rise.").font(.footnote) }
+            } else {
+                Text("Review on hold").font(.headline)
+                ForEach(blockers(now: now), id: \.self) { warning($0) }
+            }
+            if let arrow = trend.value, ["SingleDown", "DoubleDown", "FortyFiveDown"].contains(arrow) {
+                warning("The sensor arrow is downward. Review the glucose trace and insulin activity before making any treatment decision.")
+            }
+            if snapshot.value?.isfSource == "Trio reason (rounded)" { warning("Effective ISF came from rounded reason text; this balance is approximate.") }
+        }
+    }
+
+    @ViewBuilder
+    private func activitySection(now: Date) -> some View {
+        Section("How strongly IOB is acting now") {
+            if let s = snapshot.value, MealReviewSnapshot.fresh(s.iobDate, now: now), MealReviewSnapshot.fresh(s.date, now: now) {
+                row("Remaining net IOB", s.iob.map(units) ?? "Unavailable")
+                row("Net insulin activity", s.activity.map { String(format: "%.4f U/min", $0) } ?? "Unavailable")
+                if let effect = MealReviewCalculation.insulinEffect(activity: s.activity, isf: s.effectiveISF) {
+                    row("Modeled effect over 5 min", signedGlucose(effect))
+                    Text("Activity × effective ISF × 5 minutes. This is the modeled insulin effect relative to scheduled basal, before food and other influences; it is not a forecast of the actual glucose change.").font(.footnote)
+                }
+            } else { Text("Waiting for fresh Trio insulin activity.") }
+            Text("IOB already includes Trio's insulin curve and elapsed time. Activity describes its current rate of action. The review does not discount IOB a second time.").font(.footnote)
+        }
+    }
+
+    @ViewBuilder
+    private func contextSection(now: Date) -> some View {
+        Section("Live context") {
+            let latest = MealReviewCalculation.latestGlucose(samples: history.value, now: now)
+            row("Glucose", latest.map { displayGlucose($0.mgdl) } ?? "Unavailable")
+            row("Glucose age", age(latest?.date, now: now))
+            row("Sensor arrow", trend.value ?? "Unavailable")
+            row("Change in recent 20 min window", MealReviewCalculation.recentDelta(samples: history.value, now: now).map(signedGlucose) ?? "Unavailable")
+            row("Carb ratio", snapshot.value?.carbRatio.map { String(format: "%.2f g/U", $0) } ?? "Unavailable")
+            row("Ratio source", snapshot.value?.ratioSource ?? "Unavailable")
+            row("Effective ISF", snapshot.value?.effectiveISF.map { displayGlucose($0) + "/U" } ?? "Unavailable")
+            row("ISF source", snapshot.value?.isfSource ?? "Unavailable")
+            row("Trio target", snapshot.value?.targetMgdl.map(displayGlucose) ?? "Unavailable")
+            row("Upload glucose units", snapshot.value?.uploadUnitSource ?? "Unavailable")
+            row("Trio calculation age", age(snapshot.value?.date, now: now))
+            row("IOB age", age(snapshot.value?.iobDate, now: now))
+            row("COB", snapshot.value?.cob.map { String(format: "%.1f g", $0) } ?? "Unavailable")
+            row("Selected minimum prediction", snapshot.value?.minPredMgdl.map(displayGlucose) ?? "Unavailable")
+            row("Guard prediction", snapshot.value?.minGuardMgdl.map(displayGlucose) ?? "Unavailable")
+        }
+    }
+
+    private struct ForecastPoint: Identifiable {
+        let model: String
+        let index: Int
+        let date: Date
+        let glucose: Double
+        var id: String { model + String(index) }
+    }
+
+    private func forecastPoints(_ s: MealReviewSnapshot) -> [ForecastPoint] {
+        guard let date = s.date else { return [] }
+        return ["IOB", "COB", "UAM", "ZT"].flatMap { name in
+            (s.predictions[name] ?? []).enumerated().map {
+                ForecastPoint(model: name, index: $0.offset, date: date.addingTimeInterval(Double($0.offset) * 300), glucose: displayValue($0.element))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func forecastSection(now: Date) -> some View {
+        Section("Trio forecasts · before this new meal") {
+            if let s = snapshot.value, MealReviewSnapshot.fresh(s.date, now: now), !s.predictions.isEmpty {
+                Chart(forecastPoints(s)) { point in
+                    LineMark(x: .value("Time", point.date), y: .value("Glucose", point.glucose))
+                        .foregroundStyle(by: .value("Model", point.model))
+                }
+                .chartYAxisLabel(UnitSettingsStore.shared.glucoseUnit.rawValue)
+                .frame(height: 210)
+                Text("IOB: insulin without new food. COB: existing carb absorption. UAM: estimated unannounced food. ZT: zero-temp scenario. These uploaded curves do not include the meal carbs entered above. An IOB-only low is not the same as Trio's selected minimum prediction.").font(.footnote)
+            } else { Text("Fresh forecast curves are unavailable.") }
+        }
     }
 
     private func row(_ label: String, _ value: String) -> some View {
-        HStack { Text(label); Spacer(); Text(value).foregroundStyle(.secondary).multilineTextAlignment(.trailing) }
+        HStack { Text(label); Spacer(); Text(value).foregroundStyle(.secondary).multilineTextAlignment(.trailing).monospacedDigit() }
     }
 
+    private func units(_ value: Double) -> String { String(format: "%.2f U", value) }
+    private func signedUnits(_ value: Double) -> String { (value > 0 ? "+" : value < 0 ? "−" : "") + units(abs(value)) }
+    private func signedGlucose(_ value: Double) -> String { (value > 0 ? "+" : value < 0 ? "−" : "") + displayGlucose(abs(value)) }
+    private func displayValue(_ mgdl: Double) -> Double { UnitSettingsStore.shared.convertMgdlToDisplay(mgdl) }
     private func displayGlucose(_ mgdl: Double) -> String {
         Localizer.formatQuantity(HKQuantity(unit: .milligramsPerDeciliter, doubleValue: mgdl)) + " " + UnitSettingsStore.shared.glucoseUnit.rawValue
     }

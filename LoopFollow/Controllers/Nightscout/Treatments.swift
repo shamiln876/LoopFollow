@@ -69,6 +69,15 @@ extension MainViewController {
     // Process and split out treatments to individual tasks
     func updateTreatments(entries: [[String: AnyObject]]) {
         let uniqueEntries = Self.deduplicatedTreatmentEntries(entries)
+        // Keep the review from using an IOB/COB snapshot predating a new treatment.
+        Observable.shared.mealReviewNewestTreatment.value = uniqueEntries.compactMap { entry -> Date? in
+            let insulin = (entry["insulin"] as? NSNumber)?.doubleValue ?? 0
+            let carbs = (entry["carbs"] as? NSNumber)?.doubleValue ?? 0
+            guard insulin > 0 || carbs > 0,
+                  let time = (entry["timestamp"] as? String) ?? (entry["created_at"] as? String),
+                  let date = NightscoutUtils.parseDate(time), date <= Date() else { return nil }
+            return date
+        }.max()
 
         var tempBasal: [[String: AnyObject]] = []
         var bolus: [[String: AnyObject]] = []

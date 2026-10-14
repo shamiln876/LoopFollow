@@ -6,7 +6,7 @@ import HealthKit
 
 extension MainViewController {
     func DeviceStatusOpenAPS(formatter: ISO8601DateFormatter, lastDeviceStatus: [String: AnyObject]?, lastLoopRecord: [String: AnyObject]) {
-        Observable.shared.mealReview.value = MealReviewSnapshot.parse(lastLoopRecord, profileRatio: profileManager.currentCarbRatio())
+        Observable.shared.mealReview.value = MealReviewSnapshot.parse(lastLoopRecord, profileRatio: profileManager.currentCarbRatio(), profileUnits: profileManager.defaultProfile.isEmpty ? nil : (profileManager.units == .millimolesPerLiter ? "mmol/L" : "mg/dL"))
         Storage.shared.device.value = lastDeviceStatus?["device"] as? String ?? ""
         if lastLoopRecord["failureReason"] != nil {
             Observable.shared.loopStatusText.value = "X"
