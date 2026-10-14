@@ -20,9 +20,11 @@ without fractional seconds are accepted.
 
 The only numeric result is entered carbs / CR. This is labeled **carb-only insulin
 equivalent**, never a dose recommendation. There is no correction, IOB subtraction,
-COB subtraction, SMB forecast, or delay/absorption model. It is hidden with missing
+COB subtraction, SMB forecast, or delay/absorption model. The screen shows the specific reason when arithmetic is on hold. It is hidden with missing
 IOB/COB/CR/glucose timestamps, records older than ten minutes, timestamps more than
 one minute ahead, glucose below 70 mg/dL, missing trend, or falling glucose.
+The sensor arrow and change since the previous reading are displayed separately. A Flat arrow with a negative change remains held; the wording identifies the negative change rather than implying a rapid fall. The result/hold reason sits directly below the labeled carb input, with Hide keyboard controls and a separate Close button. Glucose values and thresholds use the selected display unit.
+
 Ten minutes is a prototype freshness policy, not a claim of clinical validation.
 
 Trio IOB is modeled active insulin above or below scheduled basal; a zero or

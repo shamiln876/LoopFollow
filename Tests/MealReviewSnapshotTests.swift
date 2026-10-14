@@ -56,4 +56,19 @@ struct MealReviewSnapshotTests {
         #expect(fallback.ratioSource == "Scheduled profile fallback")
         #expect(fallback.carbEquivalent(carbs: 30, glucose: 100, glucoseDate: now, now: now) == nil)
     }
+
+    @Test func flatArrowWithNegativeChangeHasSpecificHold() {
+        #expect(MealReviewSnapshot.trendHold(delta: -1, trend: "Flat") == .negativeChange)
+        #expect(snapshot().reviewEquivalent(carbs: 10, glucose: 166, glucoseDate: now, delta: -1, trend: "Flat", now: now) == nil)
+        #expect(MealReviewSnapshot.trendHold(delta: 0, trend: "Flat") == nil)
+        #expect(snapshot().reviewEquivalent(carbs: 10, glucose: 166, glucoseDate: now, delta: 0, trend: "Flat", now: now) == 0.5)
+    }
+
+    @Test func downwardArrowAndMissingTrendRemainBlocked() {
+        #expect(MealReviewSnapshot.trendHold(delta: 1, trend: "SingleDown") == .downwardArrow)
+        #expect(snapshot().reviewEquivalent(carbs: 10, glucose: 166, glucoseDate: now, delta: 1, trend: "SingleDown", now: now) == nil)
+        #expect(MealReviewSnapshot.trendHold(delta: nil, trend: nil) == .unavailable)
+        #expect(snapshot().reviewEquivalent(carbs: 10, glucose: 166, glucoseDate: now, delta: nil, trend: nil, now: now) == nil)
+        #expect(MealReviewSnapshot.trendHold(delta: nil, trend: "Flat") == nil)
+    }
 }

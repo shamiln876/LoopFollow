@@ -13,6 +13,21 @@ struct MealReviewSnapshot {
     let iobDate: Date?
     let cob: Double?
 
+    enum TrendHold {
+        case downwardArrow
+        case negativeChange
+        case unavailable
+    }
+
+    /// Preserve the conservative hold on any negative change, but distinguish it
+    /// from the sensor's arrow. A Flat arrow can coexist with a small decline.
+    static func trendHold(delta: Double?, trend: String?) -> TrendHold? {
+        if ["SingleDown", "DoubleDown", "FortyFiveDown"].contains(trend ?? "") { return .downwardArrow }
+        if let delta, delta < 0 { return .negativeChange }
+        if delta?.isFinite == true || ["Flat", "FortyFiveUp", "SingleUp", "DoubleUp"].contains(trend ?? "") { return nil }
+        return .unavailable
+    }
+
     static func fresh(_ date: Date?, now: Date) -> Bool {
         guard let date else { return false }
         let age = now.timeIntervalSince(date)
@@ -59,5 +74,10 @@ struct MealReviewSnapshot {
               carbs.isFinite, carbs > 0 else { return nil }
         let result = carbs / carbRatio
         return result.isFinite ? result : nil
+    }
+
+    func reviewEquivalent(carbs: Double, glucose: Double?, glucoseDate: Date?, delta: Double?, trend: String?, now: Date) -> Double? {
+        guard Self.trendHold(delta: delta, trend: trend) == nil else { return nil }
+        return carbEquivalent(carbs: carbs, glucose: glucose, glucoseDate: glucoseDate, now: now)
     }
 }
