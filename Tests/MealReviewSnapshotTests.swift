@@ -57,18 +57,25 @@ struct MealReviewSnapshotTests {
         #expect(fallback.carbEquivalent(carbs: 30, glucose: 100, glucoseDate: now, now: now) == nil)
     }
 
-    @Test func flatArrowWithNegativeChangeHasSpecificHold() {
-        #expect(MealReviewSnapshot.trendHold(delta: -1, trend: "Flat") == .negativeChange)
-        #expect(snapshot().reviewEquivalent(carbs: 10, glucose: 166, glucoseDate: now, delta: -1, trend: "Flat", now: now) == nil)
-        #expect(MealReviewSnapshot.trendHold(delta: 0, trend: "Flat") == nil)
+    @Test func flatArrowWithNegativeChangeShowsReferenceAndNotice() {
+        #expect(MealReviewSnapshot.trendNotice(delta: -1, trend: "Flat") == .negativeChange)
+        #expect(snapshot(cr: 12).reviewEquivalent(carbs: 25, glucose: 162, glucoseDate: now, delta: -4, trend: "Flat", now: now) == 25.0 / 12.0)
+        #expect(MealReviewSnapshot.trendNotice(delta: 0, trend: "Flat") == nil)
         #expect(snapshot().reviewEquivalent(carbs: 10, glucose: 166, glucoseDate: now, delta: 0, trend: "Flat", now: now) == 0.5)
     }
 
-    @Test func downwardArrowAndMissingTrendRemainBlocked() {
-        #expect(MealReviewSnapshot.trendHold(delta: 1, trend: "SingleDown") == .downwardArrow)
-        #expect(snapshot().reviewEquivalent(carbs: 10, glucose: 166, glucoseDate: now, delta: 1, trend: "SingleDown", now: now) == nil)
-        #expect(MealReviewSnapshot.trendHold(delta: nil, trend: nil) == .unavailable)
-        #expect(snapshot().reviewEquivalent(carbs: 10, glucose: 166, glucoseDate: now, delta: nil, trend: nil, now: now) == nil)
-        #expect(MealReviewSnapshot.trendHold(delta: nil, trend: "Flat") == nil)
+    @Test func referenceStillBlocksLowStaleAndMissingData() {
+        #expect(snapshot().reviewEquivalent(carbs: 25, glucose: 69, glucoseDate: now, delta: -4, trend: "Flat", now: now) == nil)
+        #expect(snapshot().reviewEquivalent(carbs: 25, glucose: 162, glucoseDate: now.addingTimeInterval(-601), delta: -4, trend: "Flat", now: now) == nil)
+        #expect(snapshot(iob: nil).reviewEquivalent(carbs: 25, glucose: 162, glucoseDate: now, delta: -4, trend: "Flat", now: now) == nil)
+        #expect(snapshot(cob: nil).reviewEquivalent(carbs: 25, glucose: 162, glucoseDate: now, delta: -4, trend: "Flat", now: now) == nil)
+    }
+
+    @Test func downwardArrowAndMissingTrendAreReviewNotices() {
+        #expect(MealReviewSnapshot.trendNotice(delta: 1, trend: "SingleDown") == .downwardArrow)
+        #expect(snapshot().reviewEquivalent(carbs: 10, glucose: 166, glucoseDate: now, delta: 1, trend: "SingleDown", now: now) == 0.5)
+        #expect(MealReviewSnapshot.trendNotice(delta: nil, trend: nil) == .unavailable)
+        #expect(snapshot().reviewEquivalent(carbs: 10, glucose: 166, glucoseDate: now, delta: nil, trend: nil, now: now) == 0.5)
+        #expect(MealReviewSnapshot.trendNotice(delta: nil, trend: "Flat") == nil)
     }
 }
