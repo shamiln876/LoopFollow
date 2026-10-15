@@ -4,6 +4,7 @@
 import HealthKit
 import LocalAuthentication
 import SwiftUI
+import UIKit
 
 struct BolusView: View {
     @Environment(\.presentationMode) private var presentationMode
@@ -22,6 +23,7 @@ struct BolusView: View {
     @State private var alertMessage: String? = nil
     @State private var isLoading = false
     @State private var isAuthenticating = false
+    @State private var isAdjusting = false
     @State private var statusMessage: String? = nil
 
     private let pushNotificationManager = PushNotificationManager()
@@ -111,10 +113,10 @@ struct BolusView: View {
                             Spacer()
                             adjustmentButton("+0.1 U", direction: .increase)
                         }
-                        .disabled(isLoading || isAuthenticating || showAlert)
+                        .disabled(isLoading || isAuthenticating || isAdjusting || showAlert)
                     }
                 }
-                .disabled(isLoading || isAuthenticating)
+                .disabled(isLoading || isAuthenticating || isAdjusting)
                 .safeAreaInset(edge: .bottom) {
                     Button {
                         bolusFieldIsFocused = false
@@ -143,7 +145,7 @@ struct BolusView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .disabled(isLoading || isAuthenticating)
+                    .disabled(isLoading || isAuthenticating || isAdjusting)
                     .padding(.horizontal)
                     .padding(.vertical, 8)
                     .background(.bar)
@@ -236,9 +238,20 @@ struct BolusView: View {
             maximum: maxBolus.value.doubleValue(for: .internationalUnit())
         )
         return Button(title) {
-            guard let next else { return }
+            isAdjusting = true
             bolusFieldIsFocused = false
-            bolusAmount = HKQuantity(unit: .internationalUnit(), doubleValue: next)
+            UIApplication.shared.endEditing()
+            // Commit the text field before reading the amount; never reuse a
+            // value captured before editing ended or a validation alert appeared.
+            DispatchQueue.main.async {
+                defer { isAdjusting = false }
+                guard !showAlert, !isLoading, !isAuthenticating,
+                      let committed = ManualBolusAdjustment.adjusted(
+                          current: bolusAmount.doubleValue(for: .internationalUnit()), direction: direction,
+                          increment: stepU, maximum: maxBolus.value.doubleValue(for: .internationalUnit())
+                      ) else { return }
+                bolusAmount = HKQuantity(unit: .internationalUnit(), doubleValue: committed)
+            }
         }
         .buttonStyle(.bordered)
         .disabled(next == nil)
