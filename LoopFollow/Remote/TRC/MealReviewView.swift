@@ -52,16 +52,11 @@ struct MealReviewView: View {
                     if carbsFocused { Button("Hide keyboard") { carbsFocused = false } }
                 }
                 fullSection(now: now)
-                balanceSection(now: now)
                 activitySection(now: now)
                 contextSection(now: now)
                 forecastSection(now: now)
                 Section("Comparison limitations") {
-                    Text("The full comparison applies your copied percentage and limits. It has not been validated as a dose for your dad. The uncapped balance below is shown separately. Neither can send or prefill insulin.")
-                    if let s = snapshot.value, s.trioVersion == "1.0.2", let native = s.nativeRecommendation, MealReviewSnapshot.fresh(s.date, now: now) {
-                        row("Trio upload: zero new carbs", units(native))
-                        Text("This uploaded recommendation was calculated by Trio without the meal carbs entered above. It is not the recommendation for this meal.").font(.footnote)
-                    }
+                    Text("The comparison applies your copied percentage and limits. Its intermediate arithmetic is under Calculation details. It has not been validated as a dose for your dad and cannot send or prefill insulin.")
                     DisclosureGroup("What the model includes") {
                         Text("New carbs and existing estimated COB are divided by Trio's active carb ratio. Glucose correction and recent glucose change use the reported effective ISF. Remaining net IOB is subtracted once. IOB and activity are relative to scheduled basal; negative values can represent a basal deficit. This review does not model absorption of the new meal, future SMBs, future ISF changes, or delivery that has not yet reached Nightscout. Uploaded predictions can be wrong. Entries here do not change the Meal or Bolus screens.")
                             .font(.footnote)
@@ -99,9 +94,10 @@ struct MealReviewView: View {
                     row("Maximum bolus", units(s.maxBolus))
                 }
             }
-            let issues = MealReviewFullCalculation.reasons(settings: settings.value, snapshot: snapshot.value, source: source.value, now: now)
+            let issues = MealReviewFullCalculation.reasons(settings: settings.value, snapshot: snapshot.value, source: source.value, now: now) + blockers(now: now)
             if !issues.isEmpty {
-                ForEach(issues, id: \.self) { Text($0) }
+                Text("Review on hold").font(.headline)
+                ForEach(issues, id: \.self) { warning($0) }
             } else if let carbs, carbs > 0,
                       let result = MealReviewFullCalculation.review(newCarbs: carbs, settings: settings.value, snapshot: snapshot.value, source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
             {
@@ -110,9 +106,13 @@ struct MealReviewView: View {
                 if result.rounded > localBolusLimit.value.doubleValue(for: .internationalUnit()) {
                     warning("This exceeds LoopFollow's separate local bolus limit. No amount is transferred or sent.")
                 }
-                DisclosureGroup("Percentage, limits and rounding") {
+                DisclosureGroup("Calculation details") {
                     row("Carbs after Max COB", String(format: "%.1f g", result.cappedCarbs))
-                    row("Balance after Max COB", units(result.balance))
+                    row("Carb contribution", signedUnits(result.carbUnits))
+                    row("Glucose relative to target", signedUnits(result.correctionUnits))
+                    row("Recent glucose change", signedUnits(result.trendUnits))
+                    row("Remaining net IOB", signedUnits(result.iobCreditUnits))
+                    row("Balance before percentage", signedUnits(result.balance))
                     row("After copied percentage", units(result.afterPercentage))
                     row("After maximum bolus", units(result.afterBolusLimit))
                     row("After maximum IOB", units(result.afterIOBLimit))
@@ -121,43 +121,22 @@ struct MealReviewView: View {
                 if let baseline = MealReviewFullCalculation.review(newCarbs: 0, settings: settings.value, snapshot: snapshot.value, source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now),
                    let native = snapshot.value?.nativeRecommendation
                 {
-                    row("Our zero-new-carb comparison", units(baseline.rounded))
-                    row("Trio's zero-new-carb upload", units(native))
+                    DisclosureGroup("Check against Trio's upload") {
+                        row("Our zero-new-carb comparison", units(baseline.rounded))
+                        row("Trio's zero-new-carb upload", units(native))
+                        Text("These checks exclude the new meal. Agreement alone does not validate the meal calculation or prove the copied settings are correct.").font(.footnote)
+                    }
                     if abs(baseline.rounded - native) > 0.0001 { warning("The zero-new-carb calculations differ. Recheck settings and wait for a fresh Trio cycle. This comparison is not verified.") }
-                    else { Text("Zero-new-carb values agree. Agreement alone does not validate this meal calculation or prove the copied settings are correct.").font(.footnote) }
                 }
-            } else { Text("Waiting for a positive carb entry and complete fresh review context. See the hold reasons below.") }
+            } else { Text("Waiting for complete calculation inputs.") }
             Button(settings.value == nil ? "Enter current Trio settings" : "Check copied Trio settings") { settingsPresented = true }
             if let s = settings.value {
                 Text("\(s.isHistorical ? "Historical values entered" : "Values last checked") \(s.checkedAt.formatted(date: .abbreviated, time: .shortened)). Standard calculation; reduced and super bolus excluded.").font(.footnote)
             }
-        }
-    }
-
-    @ViewBuilder
-    private func balanceSection(now: Date) -> some View {
-        Section("Uncapped balance · review only") {
-            if blockers(now: now).isEmpty, let carbs,
-               let balance = MealReviewCalculation.review(newCarbs: carbs, snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
-            {
-                row("Net model balance", units(balance.total)).font(.title3.weight(.semibold))
-                Text("Not a dose to deliver. Percentage and limits have not been applied.").font(.footnote.weight(.semibold))
-                DisclosureGroup("Calculation breakdown") {
-                    row("New meal carbs", signedUnits(balance.newCarbUnits))
-                    row("Existing COB", signedUnits(balance.existingCarbUnits))
-                    row("Glucose relative to target", signedUnits(balance.correctionUnits))
-                    row("Recent glucose change", signedUnits(balance.trendUnits))
-                    row("Remaining net IOB", signedUnits(balance.iobCreditUnits))
-                }
-                if balance.total <= 0 { Text("The model balance is zero or negative before percentage and limits. This does not predict whether the new meal will cause a later rise.").font(.footnote) }
-            } else {
-                Text("Review on hold").font(.headline)
-                ForEach(blockers(now: now), id: \.self) { warning($0) }
-            }
             if let arrow = trend.value, ["SingleDown", "DoubleDown", "FortyFiveDown"].contains(arrow) {
                 warning("The sensor arrow is downward. Review the glucose trace and insulin activity before making any treatment decision.")
             }
-            if snapshot.value?.isfSource == "Trio reason (rounded)" { warning("Effective ISF came from rounded reason text; this balance is approximate.") }
+            if snapshot.value?.isfSource == "Trio reason (rounded)" { warning("Effective ISF came from rounded reason text; this comparison is approximate.") }
         }
     }
 
