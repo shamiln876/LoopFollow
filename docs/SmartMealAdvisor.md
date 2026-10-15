@@ -25,3 +25,7 @@ Software tests and historical parser/component replay establish implementation b
 ## Manual bolus adjustment
 
 The existing manual Bolus screen has −0.1 U / +0.1 U buttons. They adjust only the amount explicitly selected on that screen, never transfer the meal comparison, and never send a command themselves. Controls require a compatible configured pump increment and an amount on that increment; they stop at zero and LoopFollow’s local maximum without silently clamping a smaller change. Editing is disabled during authentication and sending. The existing confirmation and device-owner authentication (Face ID or passcode fallback) remain required. This does not enable delivery from the unvalidated meal comparison.
+
+## Historical settings
+
+Historical values may be used for a read-only test comparison with a prominent unverified-current-settings label and recorded source description. They do not become verified merely because a comparison matches Trio. The settings editor supports historical entry without falsely confirming current values. A local one-use Documents import accepts only explicitly historical settings for the configured connection and supported source version, never overwrites saved values and cannot change remote limits or delivery settings. Actual Trio settings and clinical dosing validity still require independent verification before any future delivery integration.

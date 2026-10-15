@@ -16,6 +16,7 @@ struct LoopFollowApp: App {
             // background launch is foregrounded mid-hydration.
             if storageReady.value {
                 MainTabView()
+                    .onAppear { MealReviewSettingsImport.consumePending() }
                     .onOpenURL { url in
                         guard url.scheme == AppGroupID.urlScheme, url.host == "la-tap" else { return }
                         #if !targetEnvironment(macCatalyst)

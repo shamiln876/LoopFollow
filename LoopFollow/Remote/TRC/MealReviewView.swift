@@ -80,13 +80,25 @@ struct MealReviewView: View {
             }
         }
         .sheet(isPresented: $settingsPresented) { MealReviewSettingsView(saved: settings, source: source) }
-        .onAppear { now = Date() }
+        .onAppear { MealReviewSettingsImport.consumePending(); now = Date() }
         .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { now = $0 }
     }
 
     @ViewBuilder
     private func fullSection(now: Date) -> some View {
         Section("Full calculation · comparison only") {
+            if let s = settings.value, let reference = s.historicalReference {
+                warning("Historical settings — not verified current. Comparison for testing only.")
+                Text(reference).font(.footnote)
+            }
+            if let s = settings.value {
+                DisclosureGroup("Saved comparison settings") {
+                    row("Bolus percentage", String(format: "%.0f%%", s.percentage))
+                    row("Max IOB", units(s.maxIOB))
+                    row("Max COB", String(format: "%.0f g", s.maxCOB))
+                    row("Maximum bolus", units(s.maxBolus))
+                }
+            }
             let issues = MealReviewFullCalculation.reasons(settings: settings.value, snapshot: snapshot.value, source: source.value, now: now)
             if !issues.isEmpty {
                 ForEach(issues, id: \.self) { Text($0) }
@@ -116,7 +128,9 @@ struct MealReviewView: View {
                 }
             } else { Text("Waiting for a positive carb entry and complete fresh review context. See the hold reasons below.") }
             Button(settings.value == nil ? "Enter current Trio settings" : "Check copied Trio settings") { settingsPresented = true }
-            if let s = settings.value { Text("Values last checked \(s.checkedAt.formatted(date: .abbreviated, time: .shortened)). Standard calculation; reduced and super bolus excluded.").font(.footnote) }
+            if let s = settings.value {
+                Text("\(s.isHistorical ? "Historical values entered" : "Values last checked") \(s.checkedAt.formatted(date: .abbreviated, time: .shortened)). Standard calculation; reduced and super bolus excluded.").font(.footnote)
+            }
         }
     }
 
