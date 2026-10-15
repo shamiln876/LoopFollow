@@ -11,14 +11,20 @@ struct MealReviewView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var carbText: String
     @State private var now = Date()
+    @State private var settingsPresented = false
+    @ObservedObject private var settings: StorageValue<MealReviewSettings?>
+    @ObservedObject private var source: StorageValue<String>
+    @ObservedObject private var localBolusLimit = Storage.shared.maxBolus
     @FocusState private var carbsFocused: Bool
     @ObservedObject private var snapshot = Observable.shared.mealReview
     @ObservedObject private var history = Observable.shared.mealReviewGlucose
     @ObservedObject private var newestTreatment = Observable.shared.mealReviewNewestTreatment
     @ObservedObject private var trend = Storage.shared.lastTrendCode
 
-    init(initialCarbs: Double) {
+    init(initialCarbs: Double, settings: StorageValue<MealReviewSettings?> = Storage.shared.mealReviewSettings, source: StorageValue<String> = Storage.shared.url) {
         self.initialCarbs = initialCarbs
+        _settings = ObservedObject(wrappedValue: settings)
+        _source = ObservedObject(wrappedValue: source)
         _carbText = State(initialValue: initialCarbs.isFinite && initialCarbs > 0 ? String(format: "%.1f", initialCarbs) : "")
     }
 
@@ -45,12 +51,13 @@ struct MealReviewView: View {
                     }
                     if carbsFocused { Button("Hide keyboard") { carbsFocused = false } }
                 }
+                fullSection(now: now)
                 balanceSection(now: now)
                 activitySection(now: now)
                 contextSection(now: now)
                 forecastSection(now: now)
-                Section("Before this can become a dose") {
-                    Text("The balance is before Trio's Recommended Bolus Percentage, maximum COB, maximum bolus, maximum IOB and pump rounding. These settings are not all available through Nightscout. A final meal dose cannot be verified yet.")
+                Section("Comparison limitations") {
+                    Text("The full comparison applies your copied percentage and limits. It has not been validated as a dose for your dad. The uncapped balance below is shown separately. Neither can send or prefill insulin.")
                     if let s = snapshot.value, s.trioVersion == "1.0.2", let native = s.nativeRecommendation, MealReviewSnapshot.fresh(s.date, now: now) {
                         row("Trio upload: zero new carbs", units(native))
                         Text("This uploaded recommendation was calculated by Trio without the meal carbs entered above. It is not the recommendation for this meal.").font(.footnote)
@@ -72,13 +79,50 @@ struct MealReviewView: View {
                 }
             }
         }
+        .sheet(isPresented: $settingsPresented) { MealReviewSettingsView(saved: settings, source: source) }
         .onAppear { now = Date() }
         .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { now = $0 }
     }
 
     @ViewBuilder
+    private func fullSection(now: Date) -> some View {
+        Section("Full calculation · comparison only") {
+            let issues = MealReviewFullCalculation.reasons(settings: settings.value, snapshot: snapshot.value, source: source.value, now: now)
+            if !issues.isEmpty {
+                ForEach(issues, id: \.self) { Text($0) }
+            } else if let carbs, carbs > 0,
+                      let result = MealReviewFullCalculation.review(newCarbs: carbs, settings: settings.value, snapshot: snapshot.value, source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
+            {
+                row("Trio-style comparison", units(result.rounded)).font(.title3.weight(.semibold))
+                Text("For comparison in Trio only. Not a validated dose to deliver.").font(.footnote.weight(.semibold))
+                if result.rounded > localBolusLimit.value.doubleValue(for: .internationalUnit()) {
+                    warning("This exceeds LoopFollow's separate local bolus limit. No amount is transferred or sent.")
+                }
+                DisclosureGroup("Percentage, limits and rounding") {
+                    row("Carbs after Max COB", String(format: "%.1f g", result.cappedCarbs))
+                    row("Balance after Max COB", units(result.balance))
+                    row("After copied percentage", units(result.afterPercentage))
+                    row("After maximum bolus", units(result.afterBolusLimit))
+                    row("After maximum IOB", units(result.afterIOBLimit))
+                    row("DASH rounding down", units(result.rounded))
+                }
+                if let baseline = MealReviewFullCalculation.review(newCarbs: 0, settings: settings.value, snapshot: snapshot.value, source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now),
+                   let native = snapshot.value?.nativeRecommendation
+                {
+                    row("Our zero-new-carb comparison", units(baseline.rounded))
+                    row("Trio's zero-new-carb upload", units(native))
+                    if abs(baseline.rounded - native) > 0.0001 { warning("The zero-new-carb calculations differ. Recheck settings and wait for a fresh Trio cycle. This comparison is not verified.") }
+                    else { Text("Zero-new-carb values agree. Agreement alone does not validate this meal calculation or prove the copied settings are correct.").font(.footnote) }
+                }
+            } else { Text("Waiting for a positive carb entry and complete fresh review context. See the hold reasons below.") }
+            Button(settings.value == nil ? "Enter current Trio settings" : "Check copied Trio settings") { settingsPresented = true }
+            if let s = settings.value { Text("Values last checked \(s.checkedAt.formatted(date: .abbreviated, time: .shortened)). Standard calculation; reduced and super bolus excluded.").font(.footnote) }
+        }
+    }
+
+    @ViewBuilder
     private func balanceSection(now: Date) -> some View {
-        Section("Meal balance · review only") {
+        Section("Uncapped balance · review only") {
             if blockers(now: now).isEmpty, let carbs,
                let balance = MealReviewCalculation.review(newCarbs: carbs, snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
             {

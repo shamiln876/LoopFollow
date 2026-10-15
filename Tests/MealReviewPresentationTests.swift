@@ -38,11 +38,17 @@ final class MealReviewPresentationTests: XCTestCase {
         snapshot.activity = 0.01
         snapshot.calculationIOB = 1
         snapshot.trioVersion = "1.0.2"
+        snapshot.reportedBolusIncrement = 0.05
+        snapshot.pumpDate = now
         snapshot.uploadUnitSource = "Trio mg/dL fields"
         Observable.shared.mealReview.value = snapshot
         Observable.shared.mealReviewGlucose.value = [.init(date: now.addingTimeInterval(-900), mgdl: 175), .init(date: now, mgdl: 180)]
         Observable.shared.mealReviewNewestTreatment.value = nil
-        let controller = UIHostingController(rootView: MealReviewView(initialCarbs: 80).environment(\.sizeCategory, sizeCategory))
+        let testSource = "https://example.invalid/nightscout"
+        let source = StorageValue<String>(key: "test_meal_review_source", defaultValue: testSource)
+        let settings = StorageValue<MealReviewSettings?>(key: "test_meal_review_settings", defaultValue: .init(percentage: 80, maxIOB: 15, maxCOB: 120, maxBolus: 10, sourceFingerprint: MealReviewSettings.fingerprint(testSource), trioVersion: "1.0.2", checkedAt: now))
+        defer { source.remove(); settings.remove() }
+        let controller = UIHostingController(rootView: MealReviewView(initialCarbs: 80, settings: settings, source: source).environment(\.sizeCategory, sizeCategory))
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first { $0 is UIWindowScene } as? UIWindowScene)
         let previousWindow = scene.windows.first { $0.isKeyWindow }
         let window = UIWindow(windowScene: scene)

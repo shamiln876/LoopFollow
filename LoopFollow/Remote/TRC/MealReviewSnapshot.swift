@@ -23,6 +23,8 @@ struct MealReviewSnapshot {
     var trioVersion: String? = nil
     var uploadUnitSource = "Unavailable"
     var calculationIOB: Double? = nil
+    var reportedBolusIncrement: Double? = nil
+    var pumpDate: Date? = nil
 
     enum TrendNotice {
         case downwardArrow
@@ -51,7 +53,7 @@ struct MealReviewSnapshot {
         return value.doubleValue
     }
 
-    static func parse(_ record: [String: AnyObject], profileRatio: Double?, profileUnits: String? = nil) -> MealReviewSnapshot? {
+    static func parse(_ record: [String: AnyObject], profileRatio: Double?, profileUnits: String? = nil, pumpRecord: [String: AnyObject]? = nil) -> MealReviewSnapshot? {
         guard record["failureReason"] == nil,
               let calculation = record["suggested"] as? [String: AnyObject]
               ?? record["enacted"] as? [String: AnyObject] else { return nil }
@@ -112,6 +114,8 @@ struct MealReviewSnapshot {
         snapshot.targetMgdl = glucoseField("current_target") ?? reasonGlucose("Target")
         snapshot.minPredMgdl = glucoseField("minPredBG", positiveOnly: false) ?? reasonGlucose("minPredBG", positiveOnly: false)
         snapshot.minGuardMgdl = glucoseField("minGuardBG", positiveOnly: false) ?? reasonGlucose("minGuardBG", positiveOnly: false)
+        snapshot.reportedBolusIncrement = number(pumpRecord?["bolusIncrement"])
+        snapshot.pumpDate = date(pumpRecord?["clock"])
         snapshot.activity = number(insulin?["activity"])
         snapshot.calculationIOB = number(calculation["IOB"])
         snapshot.nativeRecommendation = number(record["recommendedBolus"]).flatMap { $0 >= 0 ? $0 : nil }
