@@ -21,8 +21,8 @@ enum ManualBolusAdjustment {
         let change = Decimal(1) / 10
         let target = direction == .increase ? base + change : base - change
         guard target >= 0, target <= limit else { return nil }
-        let result = NSDecimalNumber(decimal: target).doubleValue
-        guard result.isFinite, result >= 0, result <= maximum,
+        guard let result = Double(NSDecimalNumber(decimal: target).stringValue),
+              result.isFinite, result >= 0, result <= maximum,
               abs(abs(result - current) - 0.1) < 1e-8 else { return nil }
         return result
     }
