@@ -21,3 +21,7 @@ Trio's uploader converts target and reason glucose fields to display units but l
 A zero-new-carb comparison is shown beside Trio's uploaded zero-new-carb recommendation. A disagreement warns to recheck settings and snapshot timing. Agreement, especially at zero or a cap, cannot prove the copied settings are correct. Values converted for Nightscout can be rounded.
 
 Software tests and historical parser/component replay establish implementation behavior, not clinical dosing validity. A verified patient meal dose and any calculated-dose delivery handoff remain unavailable until actual settings and appropriate validation are established. No automatic insulin delivery, remote-send dependency, copy-to-bolus action or input write-back is added.
+
+## Manual bolus adjustment
+
+The existing manual Bolus screen has −0.1 U / +0.1 U buttons. They adjust only the amount explicitly selected on that screen, never transfer the meal comparison, and never send a command themselves. Controls require a compatible configured pump increment and an amount on that increment; they stop at zero and LoopFollow’s local maximum without silently clamping a smaller change. Editing is disabled during authentication and sending. The existing confirmation and device-owner authentication (Face ID or passcode fallback) remain required. This does not enable delivery from the unvalidated meal comparison.
