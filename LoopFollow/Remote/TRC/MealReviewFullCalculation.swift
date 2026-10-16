@@ -5,7 +5,7 @@ import Foundation
 
 /// Standard Trio calculation only: no reduced or super bolus. No delivery API.
 enum MealReviewFullCalculation {
-    struct Result {
+    struct Result: Codable, Equatable {
         let cappedCarbs: Double
         let carbUnits: Double
         let correctionUnits: Double

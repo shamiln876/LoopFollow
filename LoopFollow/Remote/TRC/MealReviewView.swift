@@ -12,6 +12,10 @@ struct MealReviewView: View {
     @State private var carbText: String
     @State private var now = Date()
     @State private var settingsPresented = false
+    @State private var reviewSession = UUID()
+    @State private var pendingAudit: DispatchWorkItem?
+    @State private var auditFailed = false
+    private let audit: MealReviewAuditStore
     @ObservedObject private var settings: StorageValue<MealReviewSettings?>
     @ObservedObject private var source: StorageValue<String>
     @ObservedObject private var localBolusLimit = Storage.shared.maxBolus
@@ -21,8 +25,9 @@ struct MealReviewView: View {
     @ObservedObject private var newestTreatment = Observable.shared.mealReviewNewestTreatment
     @ObservedObject private var trend = Storage.shared.lastTrendCode
 
-    init(initialCarbs: Double, settings: StorageValue<MealReviewSettings?> = Storage.shared.mealReviewSettings, source: StorageValue<String> = Storage.shared.url) {
+    init(initialCarbs: Double, settings: StorageValue<MealReviewSettings?> = Storage.shared.mealReviewSettings, source: StorageValue<String> = Storage.shared.url, audit: MealReviewAuditStore = .shared) {
         self.initialCarbs = initialCarbs
+        self.audit = audit
         _settings = ObservedObject(wrappedValue: settings)
         _source = ObservedObject(wrappedValue: source)
         _carbText = State(initialValue: initialCarbs.isFinite && initialCarbs > 0 ? String(format: "%.1f", initialCarbs) : "")
@@ -62,6 +67,10 @@ struct MealReviewView: View {
                             .font(.footnote)
                     }
                 }
+                Section("Comparison history") {
+                    Text("Displayed comparisons and their inputs are saved on this iPhone for up to 14 days, for review alongside actual Nightscout deliveries. A saved comparison does not confirm insulin was given.").font(.footnote)
+                    if auditFailed { warning("Comparison history could not be saved. Keep a screenshot of this review.") }
+                }
             }
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Smart Meal Advisor")
@@ -75,8 +84,34 @@ struct MealReviewView: View {
             }
         }
         .sheet(isPresented: $settingsPresented) { MealReviewSettingsView(saved: settings, source: source) }
-        .onAppear { MealReviewSettingsImport.consumePending(); now = Date() }
-        .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { now = $0 }
+        .onAppear { MealReviewSettingsImport.consumePending(); now = Date(); scheduleAudit() }
+        .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { now = $0; scheduleAudit() }
+        .onChange(of: carbText) { _, _ in scheduleAudit() }
+        .onChange(of: snapshot.value) { _, _ in scheduleAudit() }
+        .onChange(of: history.value) { _, _ in scheduleAudit() }
+        .onChange(of: settings.value) { _, _ in scheduleAudit() }
+        .onChange(of: source.value) { _, _ in scheduleAudit() }
+        .onChange(of: newestTreatment.value) { _, _ in scheduleAudit() }
+        .onChange(of: trend.value) { _, _ in scheduleAudit() }
+        .onDisappear {
+            pendingAudit?.cancel()
+            recordAudit(kind: .reviewHidden)
+            audit.flush()
+        }
+    }
+
+    private func scheduleAudit() {
+        pendingAudit?.cancel()
+        let work = DispatchWorkItem { recordAudit(kind: .comparisonDisplayed) }
+        pendingAudit = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+    }
+
+    private func recordAudit(kind: MealReviewAudit.Entry.Kind) {
+        guard let payload = MealReviewAudit.Payload.capture(carbs: carbs, source: source.value, settings: settings.value, snapshot: snapshot.value, glucose: history.value, newestTreatment: newestTreatment.value, sensorArrow: trend.value, now: now) else { return }
+        let details = Bundle.main.url(forResource: "BuildDetails", withExtension: "plist").flatMap { NSDictionary(contentsOf: $0) }
+        let entry = MealReviewAudit.Entry(kind: kind, session: reviewSession, capturedAt: Date(), evaluatedAt: now, payload: payload, sourceRevision: details?["com-LoopFollow-commit-sha"] as? String)
+        audit.record(entry) { saved in DispatchQueue.main.async { auditFailed = !saved } }
     }
 
     @ViewBuilder

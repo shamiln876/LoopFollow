@@ -29,3 +29,9 @@ The existing manual Bolus screen has −0.1 U / +0.1 U buttons. They adjust only
 ## Historical settings
 
 Historical values may be used for a read-only test comparison with a prominent unverified-current-settings label and recorded source description. They do not become verified merely because a comparison matches Trio. The settings editor supports historical entry without falsely confirming current values. A local one-use Documents import accepts only explicitly historical settings for the configured connection and supported source version, never overwrites saved values and cannot change remote limits or delivery settings. Actual Trio settings and clinical dosing validity still require independent verification before any future delivery integration.
+
+## Local comparison history
+
+Positive-carb reviews automatically record their displayed experimental comparison or hold reasons, entered carbs, reported glucose/IOB/COB/ratio/ISF/target/activity/predictions, copied settings, source fingerprint, source/app versions and timestamps. Inputs are captured after a short typing debounce and when the review is hidden. Unchanged ticks are deduplicated. A history entry is never an acceptance, carb log, dose order or delivery confirmation; actual deliveries/outcomes must be matched separately from Nightscout.
+
+History stays in the app’s Documents/MealReviewHistory directory, excluded from backup, for up to 14 days with a 20 MB total limit. Dates are milliseconds since the Unix epoch; daily JSONL filenames use UTC. No connection URL, token or remote key is recorded and no history is automatically uploaded. A write failure shows a screenshot fallback. History collection does not make the calculation clinically validated. No meal-specific ratios or treatment settings are changed.

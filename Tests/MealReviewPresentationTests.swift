@@ -48,7 +48,10 @@ final class MealReviewPresentationTests: XCTestCase {
         let source = StorageValue<String>(key: "test_meal_review_source", defaultValue: testSource)
         let settings = StorageValue<MealReviewSettings?>(key: "test_meal_review_settings", defaultValue: .init(percentage: 80, maxIOB: 15, maxCOB: 120, maxBolus: 10, sourceFingerprint: MealReviewSettings.fingerprint(testSource), trioVersion: "1.0.2", checkedAt: now, historicalReference: sizeCategory == .accessibilityLarge ? "Synthetic historical fixture; not verified current." : nil))
         defer { source.remove(); settings.remove() }
-        let controller = UIHostingController(rootView: MealReviewView(initialCarbs: 80, settings: settings, source: source).environment(\.sizeCategory, sizeCategory))
+        let auditDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let audit = MealReviewAuditStore(directory: auditDirectory)
+        defer { audit.flush(); try? FileManager.default.removeItem(at: auditDirectory) }
+        let controller = UIHostingController(rootView: MealReviewView(initialCarbs: 80, settings: settings, source: source, audit: audit).environment(\.sizeCategory, sizeCategory))
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first { $0 is UIWindowScene } as? UIWindowScene)
         let previousWindow = scene.windows.first { $0.isKeyWindow }
         let window = UIWindow(windowScene: scene)

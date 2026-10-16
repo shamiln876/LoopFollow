@@ -5,7 +5,7 @@ import CoreFoundation
 import Foundation
 
 /// A single OpenAPS record, never a mixture of cached values from different cycles.
-struct MealReviewSnapshot {
+struct MealReviewSnapshot: Codable, Equatable {
     let date: Date?
     let carbRatio: Double?
     let ratioSource: String

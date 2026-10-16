@@ -7,7 +7,7 @@ import Foundation
 /// This is the balance BEFORE max COB, percentage, max bolus, max IOB and rounding.
 /// It is not a deliverable dose and deliberately has no remote-command dependency.
 enum MealReviewCalculation {
-    struct GlucoseSample: Equatable {
+    struct GlucoseSample: Codable, Equatable {
         let date: Date
         let mgdl: Double
     }
