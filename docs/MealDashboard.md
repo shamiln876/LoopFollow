@@ -1,0 +1,11 @@
+# Meal dashboard
+
+The Home screen has a Meal dashboard card beneath the glucose/info display when a Nightscout connection is configured. It shows last-received IOB and COB plus input status. Tapping it opens the same meal review available from Meal → Smart Meal Advisor. Home's existing graph, data pipeline and alarms remain in place.
+
+The dashboard puts glucose, sensor arrow, glucose age, IOB, COB, reported insulin activity, active carb ratio, effective ISF and target above meal entry. Users can enter carbs or select Carnival foods and portions. Selected food names and portion multipliers are expandable. One Trio-style comparison remains; its existing arithmetic, source labels and limits are unchanged. A recent glucose trace follows the comparison. Detailed timestamps, modeled insulin effect and Trio's forecasts are expandable; the forecast label explicitly excludes the new meal.
+
+Input status uses the existing comparison checks without requiring a meal amount. It updates every five seconds while visible and when received inputs change. “Live inputs available” means the data checks passed, not that copied settings were verified current or a dose was clinically validated. A failed check is shown on the Home card and overview; all checks appear under Meal comparison. Values with expired timestamps are labelled stale. Required data expire after ten minutes under the existing checks. Food lookup remains offline; no offline insulin extrapolation is added.
+
+This change adds no treatment commands, dose handoff, automatic delivery, therapy setting changes or AI requests. Comparison history retains the existing behavior and does not confirm delivery. The original source PDF and food catalog are unchanged.
+
+Validation includes cached-data expiry without a new upload, treatment/IOB mismatch and low-prediction holds, missing configuration, food/history regressions, and normal/accessibility presentation captures. Simulator results, signing and installation evidence are kept separately in the ignored local build-review directory.
