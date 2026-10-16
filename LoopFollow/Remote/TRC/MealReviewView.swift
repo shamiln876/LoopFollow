@@ -46,7 +46,10 @@ struct MealReviewView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section("Live meal review") {
+                Section("At a glance") {
+                    MealDashboardOverview(status: MealDashboardStatus(snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, settings: settings.value, source: source.value, now: now), snapshot: snapshot.value, sensorArrow: trend.value, now: now, hasMeal: carbs.map { $0.isFinite && $0 > 0 } == true)
+                }
+                Section("Your meal") {
                     Text("Enter carbs to review. Values update automatically. This screen cannot send carbs or insulin.")
                     HStack {
                         Text("Meal carbs (g)")
@@ -59,14 +62,23 @@ struct MealReviewView: View {
                     if carbsFocused { Button("Hide keyboard") { carbsFocused = false } }
                     Button("Carnival food & portions") { carbsFocused = false; foodPresented = true }
                     if let foodMeal {
-                        Text("\(foodMeal.items.count) foods · estimated total carbs from the Carnival guide. Changing the carb amount manually clears this food record.")
-                            .font(.footnote).foregroundStyle(.secondary)
+                        DisclosureGroup("Selected foods · \(foodMeal.items.count)") {
+                            ForEach(foodMeal.items) { item in
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(item.food.name).font(.subheadline.weight(.semibold))
+                                    Text("\(CarnivalNumber.text(item.portions)) × \(item.food.portion)").font(.caption)
+                                }
+                            }
+                            Text("Estimated total carbs from the Carnival guide. Changing the carb amount manually clears this food record.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
                         if let low = foodMeal.total(\.low), let high = foodMeal.total(\.high) {
                             Text("Food planning range: \(CarnivalNumber.text(low))–\(CarnivalNumber.text(high)) g carbs. Not guaranteed bounds.").font(.footnote)
                         }
                     }
                 }
                 fullSection(now: now)
+                Section("Recent glucose") { MealDashboardGlucoseChart(samples: history.value, now: now) }
                 activitySection(now: now)
                 contextSection(now: now)
                 forecastSection(now: now)
@@ -83,7 +95,7 @@ struct MealReviewView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle("Smart Meal Advisor")
+            .navigationTitle("Meal dashboard")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Close") { dismiss() } }
@@ -136,7 +148,7 @@ struct MealReviewView: View {
 
     @ViewBuilder
     private func fullSection(now: Date) -> some View {
-        Section("Full calculation · comparison only") {
+        Section("Meal comparison") {
             if let s = settings.value, let reference = s.historicalReference {
                 warning("Historical settings — not verified current. Comparison for testing only.")
                 Text(reference).font(.footnote)
@@ -156,7 +168,7 @@ struct MealReviewView: View {
             } else if let carbs, carbs > 0,
                       let result = MealReviewFullCalculation.review(newCarbs: carbs, settings: settings.value, snapshot: snapshot.value, source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
             {
-                row("Trio-style comparison", units(result.rounded)).font(.title3.weight(.semibold))
+                row("Trio-style comparison", units(result.rounded)).font(.title2.weight(.semibold))
                 Text("For comparison in Trio only. Not a validated dose to deliver.").font(.footnote.weight(.semibold))
                 if result.rounded > localBolusLimit.value.doubleValue(for: .internationalUnit()) {
                     warning("This exceeds LoopFollow's separate local bolus limit. No amount is transferred or sent.")
@@ -197,38 +209,42 @@ struct MealReviewView: View {
 
     @ViewBuilder
     private func activitySection(now: Date) -> some View {
-        Section("How strongly IOB is acting now") {
-            if let s = snapshot.value, MealReviewSnapshot.fresh(s.iobDate, now: now), MealReviewSnapshot.fresh(s.date, now: now) {
-                row("Remaining net IOB", s.iob.map(units) ?? "Unavailable")
-                row("Net insulin activity", s.activity.map { String(format: "%.4f U/min", $0) } ?? "Unavailable")
-                if let effect = MealReviewCalculation.insulinEffect(activity: s.activity, isf: s.effectiveISF) {
-                    row("Modeled effect over 5 min", signedGlucose(effect))
-                    Text("Activity × effective ISF × 5 minutes. This is the modeled insulin effect relative to scheduled basal, before food and other influences; it is not a forecast of the actual glucose change.").font(.footnote)
-                }
-            } else { Text("Waiting for fresh Trio insulin activity.") }
-            Text("IOB already includes Trio's insulin curve and elapsed time. Activity describes its current rate of action. The review does not discount IOB a second time.").font(.footnote)
+        Section {
+            DisclosureGroup("Insulin activity details") {
+                if let s = snapshot.value, MealReviewSnapshot.fresh(s.iobDate, now: now), MealReviewSnapshot.fresh(s.date, now: now) {
+                    row("Remaining net IOB", s.iob.map(units) ?? "Unavailable")
+                    row("Net insulin activity", s.activity.map { String(format: "%.4f U/min", $0) } ?? "Unavailable")
+                    if let effect = MealReviewCalculation.insulinEffect(activity: s.activity, isf: s.effectiveISF) {
+                        row("Modeled effect over 5 min", signedGlucose(effect))
+                        Text("Activity × effective ISF × 5 minutes. This is the modeled insulin effect relative to scheduled basal, before food and other influences; it is not a forecast of the actual glucose change.").font(.footnote)
+                    }
+                } else { Text("Waiting for fresh Trio insulin activity.") }
+                Text("IOB already includes Trio's insulin curve and elapsed time. Activity describes its current rate of action. The review does not discount IOB a second time.").font(.footnote)
+            }
         }
     }
 
     @ViewBuilder
     private func contextSection(now: Date) -> some View {
-        Section("Live context") {
-            let latest = MealReviewCalculation.latestGlucose(samples: history.value, now: now)
-            row("Glucose", latest.map { displayGlucose($0.mgdl) } ?? "Unavailable")
-            row("Glucose age", age(latest?.date, now: now))
-            row("Sensor arrow", trend.value ?? "Unavailable")
-            row("Change in recent 20 min window", MealReviewCalculation.recentDelta(samples: history.value, now: now).map(signedGlucose) ?? "Unavailable")
-            row("Carb ratio", snapshot.value?.carbRatio.map { String(format: "%.2f g/U", $0) } ?? "Unavailable")
-            row("Ratio source", snapshot.value?.ratioSource ?? "Unavailable")
-            row("Effective ISF", snapshot.value?.effectiveISF.map { displayGlucose($0) + "/U" } ?? "Unavailable")
-            row("ISF source", snapshot.value?.isfSource ?? "Unavailable")
-            row("Trio target", snapshot.value?.targetMgdl.map(displayGlucose) ?? "Unavailable")
-            row("Upload glucose units", snapshot.value?.uploadUnitSource ?? "Unavailable")
-            row("Trio calculation age", age(snapshot.value?.date, now: now))
-            row("IOB age", age(snapshot.value?.iobDate, now: now))
-            row("COB", snapshot.value?.cob.map { String(format: "%.1f g", $0) } ?? "Unavailable")
-            row("Selected minimum prediction", snapshot.value?.minPredMgdl.map(displayGlucose) ?? "Unavailable")
-            row("Guard prediction", snapshot.value?.minGuardMgdl.map(displayGlucose) ?? "Unavailable")
+        Section {
+            DisclosureGroup("All live inputs & timestamps") {
+                let latest = MealReviewCalculation.latestGlucose(samples: history.value, now: now)
+                row("Glucose", latest.map { displayGlucose($0.mgdl) } ?? "Unavailable")
+                row("Glucose age", age(latest?.date, now: now))
+                row("Sensor arrow", trend.value ?? "Unavailable")
+                row("Change in recent 20 min window", MealReviewCalculation.recentDelta(samples: history.value, now: now).map(signedGlucose) ?? "Unavailable")
+                row("Carb ratio", snapshot.value?.carbRatio.map { String(format: "%.2f g/U", $0) } ?? "Unavailable")
+                row("Ratio source", snapshot.value?.ratioSource ?? "Unavailable")
+                row("Effective ISF", snapshot.value?.effectiveISF.map { displayGlucose($0) + "/U" } ?? "Unavailable")
+                row("ISF source", snapshot.value?.isfSource ?? "Unavailable")
+                row("Trio target", snapshot.value?.targetMgdl.map(displayGlucose) ?? "Unavailable")
+                row("Upload glucose units", snapshot.value?.uploadUnitSource ?? "Unavailable")
+                row("Trio calculation age", age(snapshot.value?.date, now: now))
+                row("IOB age", age(snapshot.value?.iobDate, now: now))
+                row("COB", snapshot.value?.cob.map { String(format: "%.1f g", $0) } ?? "Unavailable")
+                row("Selected minimum prediction", snapshot.value?.minPredMgdl.map(displayGlucose) ?? "Unavailable")
+                row("Guard prediction", snapshot.value?.minGuardMgdl.map(displayGlucose) ?? "Unavailable")
+            }
         }
     }
 
@@ -251,16 +267,18 @@ struct MealReviewView: View {
 
     @ViewBuilder
     private func forecastSection(now: Date) -> some View {
-        Section("Trio forecasts · before this new meal") {
-            if let s = snapshot.value, MealReviewSnapshot.fresh(s.date, now: now), !s.predictions.isEmpty {
-                Chart(forecastPoints(s)) { point in
-                    LineMark(x: .value("Time", point.date), y: .value("Glucose", point.glucose))
-                        .foregroundStyle(by: .value("Model", point.model))
-                }
-                .chartYAxisLabel(UnitSettingsStore.shared.glucoseUnit.rawValue)
-                .frame(height: 210)
-                Text("IOB: insulin without new food. COB: existing carb absorption. UAM: estimated unannounced food. ZT: zero-temp scenario. These uploaded curves do not include the meal carbs entered above. An IOB-only low is not the same as Trio's selected minimum prediction.").font(.footnote)
-            } else { Text("Fresh forecast curves are unavailable.") }
+        Section {
+            DisclosureGroup("Trio forecasts · before this new meal") {
+                if let s = snapshot.value, MealReviewSnapshot.fresh(s.date, now: now), !s.predictions.isEmpty {
+                    Chart(forecastPoints(s)) { point in
+                        LineMark(x: .value("Time", point.date), y: .value("Glucose", point.glucose))
+                            .foregroundStyle(by: .value("Model", point.model))
+                    }
+                    .chartYAxisLabel(UnitSettingsStore.shared.glucoseUnit.rawValue)
+                    .frame(height: 210)
+                    Text("IOB: insulin without new food. COB: existing carb absorption. UAM: estimated unannounced food. ZT: zero-temp scenario. These uploaded curves do not include the meal carbs entered above. An IOB-only low is not the same as Trio's selected minimum prediction.").font(.footnote)
+                } else { Text("Fresh forecast curves are unavailable.") }
+            }
         }
     }
 
