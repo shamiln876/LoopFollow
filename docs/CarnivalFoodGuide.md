@@ -4,9 +4,9 @@ Feature branch: `feature/carnival-food-guide`, based on the tested meal-review/h
 
 ## Intended experience
 
-1. Search a food by name, venue or meal category in LoopFollow.
+1. Search a food by name or venue in LoopFollow.
 2. Select the matching guide entry and confirm the listed base portion.
-3. Choose the amount eaten: a fraction of that portion, a piece count when the base is one piece, or grams when a usable reference weight exists.
+3. Choose the amount eaten: a fraction of that portion, a piece count when the base is one piece, using the exact base portion printed in the guide.
 4. Build a plate from multiple entries and inspect its estimated total carbohydrates, protein, fat and available planning range.
 5. Explicitly use the total-carbohydrate estimate in the existing Smart Meal Advisor. Preserve the current calculation checks, historical-setting labels, independent manual controls and review history.
 
@@ -40,14 +40,14 @@ The source records use `id`, `venue`, `name`, `meal`, `portion`, `weight`, `c` (
 
 ## Current status
 
-The feature branch and source review are prepared. The project mirror's `sources/` directory is empty, and the guide's generated files are in the original cloud chat/Library rather than this Mac. The actual dataset has not been imported, bundled, tested or installed in LoopFollow. No food-search interface or food-derived recommendation is claimed as implemented.
+The supplied 153-page PDF has been extracted into the bundled `CarnivalFoodGuide.json` resource. All 1,085 IDs, 30 venue counts, 1,031 estimates, 54 missing recipes and 79 source references were checked. The source PDF SHA-256 is `fbf12613fa1574124e834424e077f7ea69b1af3615f0ab2645cb03e3e1074aa8`. Each entry retains its source page, ID, printed portion, printed rounded nutrients, planning range and source notes. Search and plate-building UI are implemented; compilation, testing and installation status are reported separately.
 
-The original complete package, JSON or HTML is needed to finish the integration without recreating or inventing the database. Keep synced source files read-only and work from a derived application resource.
+The PDF remains unchanged. `tools/extract_carnival_pdf.py` reproduces the application resource and fails on count/layout inconsistencies. PDF values are rounded; displayed net carbs are retained independently rather than reconstructed from rounded total carbs/fibre. Ingredient-model weights and meal-category fields from the original JSON are not recoverable from this PDF, so this version uses base-portion multipliers and venue/name search. It does not guess a grams-to-serving conversion. Food selections populate only the existing comparison input; manual carb edits clear linked food provenance. Food IDs, portions, source fingerprint and nutrient estimates are included in local review history.
 
-## Required verification after the source is available
+## Verification
 
-- Check record count, unique IDs, missing nutrients and the guide's estimate labels.
-- Test fractional servings, per-piece quantities, gram conversions, mixed plates and incomplete totals.
-- Test food search and ambiguous matches against real guide entries.
+- The extractor and bundled-resource tests check all record counts, unique IDs, missing nutrients and estimate labels.
+- Tests cover fractional servings, piece counts, mixed plates, incomplete totals, invalid quantities, malformed catalogs, matching source provenance and legacy history decoding.
+- Search tests use actual guide entries, word/venue filters, accents and unmatched queries. Food selection is explicit; free-text matches do not invent foods or portions.
 - Verify that selecting food-derived carbs updates only the intended meal review and records its provenance.
-- Compile and test the app, inspect normal/accessibility layouts, and verify offline lookup on the iPhone before reporting completion.
+- Initial full simulator suite: 147 Swift Testing tests plus 2 existing presentation tests passed. Final focused run: 13 food/history tests plus 2 new presentation tests passed. Normal food search and accessibility plate captures were inspected. Signed build and iPhone installation status are recorded in the delivery report.

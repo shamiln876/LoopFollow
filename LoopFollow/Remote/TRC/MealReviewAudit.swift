@@ -16,16 +16,21 @@ enum MealReviewAudit {
         let result: MealReviewFullCalculation.Result?
         let holdReasons: [String]
         let sensorArrow: String?
+        let foodMeal: CarnivalMeal?
 
-        static func capture(carbs: Double?, source: String, settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, glucose: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, sensorArrow: String?, now: Date) -> Self? {
+        static func capture(carbs: Double?, source: String, settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, glucose: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, sensorArrow: String?, now: Date, foodMeal: CarnivalMeal? = nil) -> Self? {
             guard let carbs, carbs.isFinite, carbs > 0 else { return nil }
+            let linkedFood = foodMeal.flatMap { meal -> CarnivalMeal? in
+                guard let total = meal.carbsForReview, abs(total - carbs) < 0.000001 else { return nil }
+                return meal
+            }
             var reasons = MealReviewCalculation.reasons(snapshot: snapshot, samples: glucose, newestTreatment: newestTreatment, now: now)
                 + MealReviewFullCalculation.reasons(settings: settings, snapshot: snapshot, source: source, now: now)
             let result = MealReviewFullCalculation.review(newCarbs: carbs, settings: settings, snapshot: snapshot, source: source, samples: glucose, newestTreatment: newestTreatment, now: now)
             if reasons.isEmpty, result == nil { reasons.append("Calculation could not be completed from these inputs.") }
             return Self(carbs: carbs, sourceFingerprint: MealReviewSettings.fingerprint(source), settings: settings, snapshot: snapshot,
                         glucose: glucose, recentDelta: MealReviewCalculation.recentDelta(samples: glucose, now: now), newestTreatment: newestTreatment,
-                        result: result, holdReasons: reasons, sensorArrow: sensorArrow)
+                        result: result, holdReasons: reasons, sensorArrow: sensorArrow, foodMeal: linkedFood)
         }
     }
 
