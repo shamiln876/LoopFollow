@@ -57,3 +57,9 @@ The installed dashboard build was traced to source revision `80e3f82`. This inte
 The update uses the regular app bundle and App Group, with build number 11. No storage-key, connection, alarm, keychain or migration changes are introduced. A private local backup of preferences and Documents was verified before preparing the update. Physical installation and post-update preservation verification are recorded below when complete. Split-carb sending remains held for the receiver dependency described above.
 
 The combined upgrade passed 50 calculation, snapshot, history, food-guide and dashboard tests, plus six presentation tests (56 total). Rendered captures of the integrated advisor and standard editable Meal screen were inspected. The synthetic 80 g / 4.35 U handoff shows both editable values correctly and zero protein/fat. No send or authentication action was invoked during these checks.
+
+### Regular-app deployment readiness
+
+The combined regular-app build 11 signed successfully. Its signature, regular LoopFollow bundle identifier, production App Group identity and embedded extension were verified. The existing build 10 signed archive is retained locally for rollback. A fresh private preference snapshot and Documents backup were verified immediately before the installation attempt; credentials were not displayed or uploaded.
+
+Automatic approval review blocked the in-place installation action pending explicit user approval to replace the active monitoring app. The current regular app has not been updated by this attempt. No treatment commands or live pump-setting changes were made.
