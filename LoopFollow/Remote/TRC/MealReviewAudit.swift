@@ -24,9 +24,8 @@ enum MealReviewAudit {
                 guard let total = meal.carbsForReview, abs(total - carbs) < 0.000001 || abs(total.rounded() - carbs) < 0.000001 else { return nil }
                 return meal
             }
-            var reasons = MealReviewCalculation.reasons(snapshot: snapshot, samples: glucose, newestTreatment: newestTreatment, now: now)
-                + MealReviewFullCalculation.reasons(settings: settings, snapshot: snapshot, source: source, now: now)
-            let result = MealReviewFullCalculation.review(newCarbs: carbs, settings: settings, snapshot: snapshot, source: source, samples: glucose, newestTreatment: newestTreatment, now: now)
+            var reasons = SmartMealDraft.prefillReasons(settings: settings, snapshot: snapshot, source: source, samples: glucose, newestTreatment: newestTreatment, now: now)
+            let result = MealReviewFullCalculation.comparison(newCarbs: carbs, settings: settings, snapshot: snapshot, source: source, samples: glucose, newestTreatment: newestTreatment, now: now)
             if reasons.isEmpty, result == nil { reasons.append("Calculation could not be completed from these inputs.") }
             return Self(carbs: carbs, sourceFingerprint: MealReviewSettings.fingerprint(source), settings: settings, snapshot: snapshot,
                         glucose: glucose, recentDelta: MealReviewCalculation.recentDelta(samples: glucose, now: now), newestTreatment: newestTreatment,

@@ -110,4 +110,45 @@ struct RiceMealPlanTests {
         #expect(settings.percentage == 90)
     }
 
+    @Test func automaticDraftNeedsNoTypedRecommendationAndRechecksFullMeal() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let source = "https://example.invalid"
+        let saved = MealReviewSettings(percentage: 90, maxIOB: 20, maxCOB: 120, maxBolus: 10,
+            sourceFingerprint: MealReviewSettings.fingerprint(source), trioVersion: "1.0.2", checkedAt: now)
+        var snapshot = MealReviewSnapshot(date: now, carbRatio: 10, ratioSource: "Trio reported", iob: 0, iobDate: now, cob: 0)
+        snapshot.effectiveISF = 40
+        snapshot.isfSource = "Trio structured effective ISF"
+        snapshot.targetMgdl = 100
+        snapshot.calculationIOB = 0
+        snapshot.minPredMgdl = 100
+        snapshot.minGuardMgdl = 100
+        snapshot.trioVersion = "1.0.2"
+        snapshot.reportedBolusIncrement = 0.05
+        snapshot.pumpDate = now
+        let samples: [MealReviewCalculation.GlucoseSample] = [.init(date: now.addingTimeInterval(-900), mgdl: 100), .init(date: now, mgdl: 100)]
+        func make(_ settings: MealReviewSettings = saved, full: Double = 7.2, protein: Double = 0) -> SmartMealDraft? {
+            let plan = RiceMealPlan(carbs: 80, fullRecommendation: full, upfrontPercent: 75, confirmedAt: now)!
+            return SmartMealDraft.make(plan: plan, protein: protein, fat: 0, settings: settings, snapshot: snapshot,
+                source: source, samples: samples, newestTreatment: nil, now: now)
+        }
+        // No manually copied recommendation is supplied to the production factory.
+        #expect(make()?.plan.upfrontInsulin == 5.4)
+        #expect(make()?.plan.immediateCarbs == 60)
+        #expect(make(full: 5.4) == nil) // Never calculate from only the 60 g now.
+        #expect(make(protein: .nan) == nil)
+        let historical = MealReviewSettings(percentage: 90, maxIOB: 20, maxCOB: 120, maxBolus: 10,
+            sourceFingerprint: MealReviewSettings.fingerprint(source), trioVersion: "1.0.2", checkedAt: now, historicalReference: "Fixture")
+        #expect(make(historical) == nil)
+        let expired = MealReviewSettings(percentage: 90, maxIOB: 20, maxCOB: 120, maxBolus: 10,
+            sourceFingerprint: MealReviewSettings.fingerprint(source), trioVersion: "1.0.2", checkedAt: now.addingTimeInterval(-86401))
+        #expect(make(expired) == nil)
+        snapshot.minGuardMgdl = 60
+        #expect(MealReviewFullCalculation.comparison(newCarbs: 80, settings: saved, snapshot: snapshot, source: source,
+            samples: samples, newestTreatment: nil, now: now)?.rounded == 7.2)
+        #expect(make() == nil) // A visible comparison never clears the low-forecast hold.
+        snapshot.minGuardMgdl = 100
+        snapshot.isfSource = "Trio reason (rounded)"
+        #expect(make() == nil)
+    }
+
 }

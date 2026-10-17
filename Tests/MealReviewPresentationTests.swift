@@ -25,7 +25,12 @@ final class MealReviewPresentationTests: XCTestCase {
     }
 
     @MainActor
-    private func captureReview(sizeCategory: ContentSizeCategory, name: String, withDraft: Bool = false) async throws {
+    func testLowForecastComparison() async throws {
+        try await captureReview(sizeCategory: .large, name: "Automatic comparison — low forecast hold", lowForecast: true)
+    }
+
+    @MainActor
+    private func captureReview(sizeCategory: ContentSizeCategory, name: String, withDraft: Bool = false, lowForecast: Bool = false) async throws {
         let previousSnapshot = Observable.shared.mealReview.value
         let previousHistory = Observable.shared.mealReviewGlucose.value
         let previousTreatment = Observable.shared.mealReviewNewestTreatment.value
@@ -40,7 +45,7 @@ final class MealReviewPresentationTests: XCTestCase {
         snapshot.isfSource = "Trio structured effective ISF"
         snapshot.targetMgdl = 100
         snapshot.minPredMgdl = 100
-        snapshot.minGuardMgdl = 100
+        snapshot.minGuardMgdl = lowForecast ? 60 : 100
         snapshot.activity = 0.01
         snapshot.calculationIOB = 1
         snapshot.trioVersion = "1.0.2"

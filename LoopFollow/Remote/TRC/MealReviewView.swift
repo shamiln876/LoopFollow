@@ -15,7 +15,6 @@ struct MealReviewView: View {
     @State private var proteinText = ""
     @State private var fatText = ""
     @State private var sendFatProtein = false
-    @State private var trioCheckedText = ""
     private let onUse: ((SmartMealDraft) -> Void)?
     @State private var customPercent = "75"
     @State private var carbText: String
@@ -46,12 +45,6 @@ struct MealReviewView: View {
     }
 
     private var carbs: Double? { Double(carbText.replacingOccurrences(of: ",", with: ".")) }
-
-    private func blockers(now: Date) -> [String] {
-        var reasons = MealReviewCalculation.reasons(snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
-        if carbs.map({ $0.isFinite && $0 > 0 }) != true { reasons.insert("Enter a positive carb amount.", at: 0) }
-        return reasons
-    }
 
     var body: some View {
         NavigationView {
@@ -89,12 +82,13 @@ struct MealReviewView: View {
                 }
                 presetSection
                 fullSection(now: now)
+                nutrientsSection
                 Section("Recent glucose") { MealDashboardGlucoseChart(samples: history.value, now: now) }
                 activitySection(now: now)
                 contextSection(now: now)
                 forecastSection(now: now)
                 Section("Comparison limitations") {
-                    Text("The comparison applies your copied percentage and limits. Its intermediate arithmetic is under Calculation details. It has not been validated as a dose for your dad and cannot send insulin. Dose prefill requires a matching full recommendation checked in Trio.")
+                    Text("The calculation uses all meal carbs, then applies your saved Trio percentage and limits, followed by the selected upfront percentage. No recommendation needs to be typed. Historical settings and safety holds allow comparison only; they cannot enable dose prefill.")
                     DisclosureGroup("What the model includes") {
                         Text("New carbs and existing estimated COB are divided by Trio's active carb ratio. Glucose correction and recent glucose change use the reported effective ISF. Remaining net IOB is subtracted once. IOB and activity are relative to scheduled basal; negative values can represent a basal deficit. This review does not model absorption of the new meal, future SMBs, future ISF changes, or delivery that has not yet reached Nightscout. Uploaded predictions can be wrong. Use Prefill to transfer a local draft; confirmation and authentication occur on the Meal screen.")
                             .font(.footnote)
@@ -131,13 +125,12 @@ struct MealReviewView: View {
         .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { now = $0; scheduleAudit() }
         .onChange(of: carbText) { _, _ in
             if let total = foodMeal?.carbsForReview, carbs.map({ abs($0 - total.rounded()) < 0.000001 }) != true { foodMeal = nil }
-            trioCheckedText = ""
             scheduleAudit()
         }
-        .onChange(of: snapshot.value) { _, _ in trioCheckedText = ""; scheduleAudit() }
+        .onChange(of: snapshot.value) { _, _ in scheduleAudit() }
         .onChange(of: history.value) { _, _ in scheduleAudit() }
-        .onChange(of: settings.value) { _, _ in trioCheckedText = ""; scheduleAudit() }
-        .onChange(of: source.value) { _, _ in trioCheckedText = ""; scheduleAudit() }
+        .onChange(of: settings.value) { _, _ in scheduleAudit() }
+        .onChange(of: source.value) { _, _ in scheduleAudit() }
         .onChange(of: newestTreatment.value) { _, _ in scheduleAudit() }
         .onChange(of: trend.value) { _, _ in scheduleAudit() }
         .onDisappear {
@@ -164,42 +157,32 @@ struct MealReviewView: View {
                 carbsNowText = String(Int(value.carbsNowPercent))
                 delayText = String(Int(value.delayMinutes))
                 customPercent = String(Int(value.insulinPercent))
-                trioCheckedText = ""
             }
             HStack { Text("Carbs announced now (%)"); TextField("0–100", text: $carbsNowText).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
             HStack { Text("Remaining carbs after (min)"); TextField("Minutes", text: $delayText).keyboardType(.numberPad).multilineTextAlignment(.trailing) }
             HStack { Text("Upfront insulin (%)"); TextField("0–100", text: $customPercent).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
             Text("Insulin percentage is independent of the carb split. It applies after Trio's existing recommendation percentage and limits. No later insulin bolus is scheduled.").font(.footnote)
         }
+    }
+
+    private var nutrientsSection: some View {
         Section("Optional protein and fat") {
             HStack { Text("Protein (g), optional"); TextField("0", text: $proteinText).keyboardType(.numberPad) }
             HStack { Text("Fat (g), optional"); TextField("0", text: $fatText).keyboardType(.numberPad) }
             Toggle("Include protein/fat in Meal draft", isOn: $sendFatProtein)
             if sendFatProtein { warning("Trio may convert these values to FPU equivalents. Check before confirming.") }
         }
-        Section("Dose prefill verification") {
-            HStack { Text("Full recommendation checked in Trio (U)"); TextField("Required for dose prefill", text: $trioCheckedText).keyboardType(.decimalPad) }
-            Text("Compare using ALL meal carbs in Trio. Do not confirm or deliver that comparison in Trio. Historical settings cannot enable dose prefill.").font(.footnote)
-        }
-    }
-
-    private func validNutrient(_ value: Double) -> Bool {
-        value.isFinite && value >= 0 && value <= 1000 && value.rounded() == value
     }
 
     private func draft(full: Double) -> SmartMealDraft? {
         let current = Date()
-        guard let plan = makePlan(full: full), let settings = settings.value, let snapshot = snapshot.value,
-              let checked = Double(trioCheckedText.replacingOccurrences(of: ",", with: ".")), checked.isFinite,
-              abs(checked - full) < 0.000001,
+        guard let plan = makePlan(full: full),
               let protein = Double(proteinText.isEmpty ? "0" : proteinText),
               let fat = Double(fatText.isEmpty ? "0" : fatText),
-              validNutrient(protein), validNutrient(fat),
-              blockers(now: current).isEmpty,
               plan.upfrontInsulin <= localBolusLimit.value.doubleValue(for: .internationalUnit()) else { return nil }
-        let draft = SmartMealDraft(plan: plan, protein: sendFatProtein ? protein : 0, fat: sendFatProtein ? fat : 0,
-                                   settings: settings, snapshot: snapshot, source: source.value, createdAt: current)
-        return draft.isCurrent(now: current, settings: settings, snapshot: snapshot, source: source.value) ? draft : nil
+        return SmartMealDraft.make(plan: plan, protein: sendFatProtein ? protein : 0, fat: sendFatProtein ? fat : 0,
+                                   settings: settings.value, snapshot: snapshot.value, source: source.value,
+                                   samples: history.value, newestTreatment: newestTreatment.value, now: current)
     }
 
     private func scheduleAudit() {
@@ -217,12 +200,11 @@ struct MealReviewView: View {
     }
 
     @ViewBuilder
-    private func selectionSection(full: Double) -> some View {
+    private func selectionSection(full: Double, comparisonOnly: Bool) -> some View {
                 Group {
-                    row("Full comparison before upfront selection", units(full))
                     if selectedPercent != nil,
                        let plan = makePlan(full: full) {
-                        row("Selected upfront", units(plan.upfrontInsulin))
+                        row(comparisonOnly ? "Upfront comparison" : "Selected upfront", units(plan.upfrontInsulin))
                         row("Carbs now", "\(plan.immediateCarbs) g")
                         row("Carbs later", "\(plan.delayedCarbs) g at +\(delayText) min")
                         if plan.delayedCarbs > 0 { warning(RiceMealPlan.sendingBlocker) }
@@ -241,30 +223,25 @@ struct MealReviewView: View {
 
     @ViewBuilder
     private func fullSection(now: Date) -> some View {
-        Section("Meal comparison") {
-            if let s = settings.value, let reference = s.historicalReference {
-                warning("Historical settings — not verified current. Comparison for testing only.")
-                Text(reference).font(.footnote)
-            }
-            if let s = settings.value {
-                DisclosureGroup("Saved comparison settings") {
-                    row("Bolus percentage", String(format: "%.0f%%", s.percentage))
-                    row("Max IOB", units(s.maxIOB))
-                    row("Max COB", String(format: "%.0f g", s.maxCOB))
-                    row("Maximum bolus", units(s.maxBolus))
-                }
-            }
-            let issues = MealReviewFullCalculation.reasons(settings: settings.value, snapshot: snapshot.value, source: source.value, now: now) + blockers(now: now)
+        Section("Meal calculation · automatic") {
+            let prefillHolds = SmartMealDraft.prefillReasons(settings: settings.value, snapshot: snapshot.value, source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
+            let issues = MealReviewFullCalculation.reasons(settings: settings.value, snapshot: snapshot.value, source: source.value, now: now)
+                + MealReviewCalculation.reasons(snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, now: now, includeSafetyHolds: false)
             if !issues.isEmpty {
-                Text("Review on hold").font(.headline)
+                Text("Calculation unavailable").font(.headline)
                 ForEach(issues, id: \.self) { warning($0) }
             } else if let carbs, carbs > 0,
-                      let result = MealReviewFullCalculation.review(newCarbs: carbs, settings: settings.value, snapshot: snapshot.value, source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
+                      let result = MealReviewFullCalculation.comparison(newCarbs: carbs, settings: settings.value, snapshot: snapshot.value, source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
             {
-                row("Trio-style comparison", units(result.rounded)).font(.title2.weight(.semibold))
-                selectionSection(full: result.rounded)
-
-                Text("Review the full recommendation in Trio before prefilling a dose.").font(.footnote.weight(.semibold))
+                if prefillHolds.isEmpty {
+                    row("Calculated full recommendation", units(result.rounded)).font(.title2.weight(.semibold))
+                } else {
+                    Text("Comparison only — dose prefill held").font(.headline)
+                    row("Calculated comparison, not a dose", units(result.rounded)).font(.title2.weight(.semibold))
+                }
+                selectionSection(full: result.rounded, comparisonOnly: !prefillHolds.isEmpty)
+                ForEach(prefillHolds, id: \.self) { warning($0) }
+                Text("Updates automatically from the full meal amount. Review the selected dose in the editable Meal screen before confirming.").font(.footnote)
                 if result.rounded > localBolusLimit.value.doubleValue(for: .internationalUnit()) {
                     warning("The full comparison exceeds LoopFollow's local bolus limit. The selected upfront amount must fit that limit before prefill.")
                 }
@@ -290,7 +267,18 @@ struct MealReviewView: View {
                     }
                     if abs(baseline.rounded - native) > 0.0001 { warning("The zero-new-carb calculations differ. Recheck settings and wait for a fresh Trio cycle. This comparison is not verified.") }
                 }
-            } else { Text("Waiting for complete calculation inputs.") }
+            } else if carbs.map({ $0.isFinite && $0 > 0 }) != true {
+                Text("Enter meal carbs above to calculate automatically. No insulin amount is required.")
+            } else { warning("Calculation could not be completed from these inputs. Check the saved settings and live data.") }
+            if let s = settings.value {
+                DisclosureGroup("Saved calculator settings") {
+                    row("Bolus percentage", String(format: "%.0f%%", s.percentage))
+                    row("Max IOB", units(s.maxIOB))
+                    row("Max COB", String(format: "%.0f g", s.maxCOB))
+                    row("Maximum bolus", units(s.maxBolus))
+                    if let reference = s.historicalReference { Text(reference).font(.footnote) }
+                }
+            }
             Button(settings.value == nil ? "Enter current Trio settings" : "Check copied Trio settings") { settingsPresented = true }
             if let s = settings.value {
                 Text("\(s.isHistorical ? "Historical values entered" : "Values last checked") \(s.checkedAt.formatted(date: .abbreviated, time: .shortened)). Standard calculation; reduced and super bolus excluded.").font(.footnote)

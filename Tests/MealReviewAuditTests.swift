@@ -12,6 +12,7 @@ struct MealReviewAuditTests {
     private func payload(carbs: Double = 25, held: Bool = false) -> MealReviewAudit.Payload {
         var snapshot = MealReviewSnapshot(date: now, carbRatio: 12, ratioSource: "Trio reported", iob: 1, iobDate: now, cob: 5)
         snapshot.effectiveISF = 50
+        snapshot.isfSource = "Trio structured effective ISF"
         snapshot.targetMgdl = 100
         snapshot.minPredMgdl = 100
         snapshot.minGuardMgdl = 100

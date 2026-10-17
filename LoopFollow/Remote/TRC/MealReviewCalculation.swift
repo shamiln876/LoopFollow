@@ -51,7 +51,7 @@ enum MealReviewCalculation {
         return result.total.isFinite ? result : nil
     }
 
-    static func reasons(snapshot: MealReviewSnapshot?, samples: [GlucoseSample], newestTreatment: Date?, now: Date) -> [String] {
+    static func reasons(snapshot: MealReviewSnapshot?, samples: [GlucoseSample], newestTreatment: Date?, now: Date, includeSafetyHolds: Bool = true) -> [String] {
         guard let snapshot else { return ["Waiting for a successful Trio calculation."] }
         var reasons: [String] = []
         if !MealReviewSnapshot.fresh(snapshot.date, now: now) { reasons.append("Trio calculation is missing or stale.") }
@@ -73,10 +73,10 @@ enum MealReviewCalculation {
         let latest = latestGlucose(samples: samples, now: now)
         if !MealReviewSnapshot.fresh(latest?.date, now: now) { reasons.append("Glucose is missing or stale.") }
         if samples.contains(where: { $0.date > now.addingTimeInterval(60) }) { reasons.append("Glucose has a future timestamp. Check the device clock.") }
-        if let latest, latest.mgdl < 70 { reasons.append("Low glucose: follow the established hypoglycemia treatment plan before meal review.") }
+        if includeSafetyHolds, let latest, latest.mgdl < 70 { reasons.append("Low glucose: follow the established hypoglycemia treatment plan before meal review.") }
         if snapshot.minPredMgdl == nil || snapshot.minGuardMgdl == nil { reasons.append("Trio's selected prediction or guard value is unavailable.") }
-        if let predicted = snapshot.minPredMgdl, predicted < 70 { reasons.append("Trio's selected prediction is below 70 mg/dL (3.9 mmol/L). Review is on hold.") }
-        if let guardBG = snapshot.minGuardMgdl, guardBG < 70 { reasons.append("Trio's guard prediction is below 70 mg/dL (3.9 mmol/L). Review is on hold.") }
+        if includeSafetyHolds, let predicted = snapshot.minPredMgdl, predicted < 70 { reasons.append("Trio's selected prediction is below 70 mg/dL (3.9 mmol/L). Dose prefill is on hold.") }
+        if includeSafetyHolds, let guardBG = snapshot.minGuardMgdl, guardBG < 70 { reasons.append("Trio's guard prediction is below 70 mg/dL (3.9 mmol/L). Dose prefill is on hold.") }
         if recentDelta(samples: samples, now: now) == nil { reasons.append("At least two recent glucose readings are required for the trend adjustment.") }
         if let treatment = newestTreatment, let cycle = snapshot.date, let insulin = snapshot.iobDate,
            treatment > min(cycle, insulin).addingTimeInterval(5)

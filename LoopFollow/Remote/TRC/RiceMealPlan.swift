@@ -56,6 +56,33 @@ struct SmartMealDraft {
     let source: String
     let createdAt: Date
 
+    static func prefillReasons(settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, source: String, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, now: Date) -> [String] {
+        var reasons = MealReviewFullCalculation.reasons(settings: settings, snapshot: snapshot, source: source, now: now)
+            + MealReviewCalculation.reasons(snapshot: snapshot, samples: samples, newestTreatment: newestTreatment, now: now)
+        if let settings {
+            if settings.isHistorical { reasons.append("Saved Trio settings are historical. Check the current percentage and limits in calculator settings before dose prefill.") }
+            else if now.timeIntervalSince(settings.checkedAt) < 0 || now.timeIntervalSince(settings.checkedAt) > 86400 {
+                reasons.append("Current Trio settings have not been checked within 24 hours. Recheck calculator settings before dose prefill.")
+            }
+        }
+        if snapshot?.isfSource != "Trio structured effective ISF" {
+            reasons.append("Dose prefill requires Trio's structured effective ISF; rounded reason text is for comparison only.")
+        }
+        return reasons
+    }
+
+    /// Build directly from the automatic full-meal calculation, never a typed
+    /// copy of Trio's answer. Confirmation/authentication remain in MealView.
+    static func make(plan: RiceMealPlan, protein: Double, fat: Double, settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, source: String, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, now: Date) -> Self? {
+        guard prefillReasons(settings: settings, snapshot: snapshot, source: source, samples: samples, newestTreatment: newestTreatment, now: now).isEmpty,
+              let settings, let snapshot,
+              [protein, fat].allSatisfy({ $0.isFinite && $0 >= 0 && $0 <= 1000 && $0.rounded() == $0 }),
+              let result = MealReviewFullCalculation.review(newCarbs: Double(plan.immediateCarbs + plan.delayedCarbs), settings: settings, snapshot: snapshot, source: source, samples: samples, newestTreatment: newestTreatment, now: now),
+              result.rounded == plan.fullRecommendation else { return nil }
+        let draft = Self(plan: plan, protein: protein, fat: fat, settings: settings, snapshot: snapshot, source: source, createdAt: now)
+        return draft.isCurrent(now: now, settings: settings, snapshot: snapshot, source: source) ? draft : nil
+    }
+
     func isCurrent(now: Date, settings current: MealReviewSettings?, snapshot live: MealReviewSnapshot?, source currentSource: String) -> Bool {
         guard !settings.isHistorical, current == settings, live == snapshot, source == currentSource,
               now.timeIntervalSince(createdAt) >= 0, now.timeIntervalSince(createdAt) <= 120,

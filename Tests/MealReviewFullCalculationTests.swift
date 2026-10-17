@@ -117,4 +117,30 @@ struct MealReviewFullCalculationTests {
         #expect(reported.reportedBolusIncrement == 0.05)
         #expect(reported.pumpDate == now)
     }
+
+    @Test func heldComparisonRemainsVisibleWithoutAuthorizingDoseOrUsingStaleData() {
+        var s = MealReviewSnapshot(date: now, carbRatio: 10, ratioSource: "Trio reported", iob: 1, iobDate: now, cob: 20)
+        s.calculationIOB = 1
+        s.effectiveISF = 40
+        s.targetMgdl = 100
+        s.minPredMgdl = 100
+        s.minGuardMgdl = 60
+        s.trioVersion = "1.0.2"
+        s.reportedBolusIncrement = 0.05
+        s.pumpDate = now
+        let readings: [MealReviewCalculation.GlucoseSample] = [.init(date: now.addingTimeInterval(-900), mgdl: 175), .init(date: now, mgdl: 180)]
+        #expect(MealReviewFullCalculation.comparison(newCarbs: 80, settings: settings(), snapshot: s, source: source,
+            samples: readings, newestTreatment: nil, now: now)?.rounded == 8.9)
+        #expect(MealReviewFullCalculation.review(newCarbs: 80, settings: settings(), snapshot: s, source: source,
+            samples: readings, newestTreatment: nil, now: now) == nil)
+        #expect(MealReviewFullCalculation.comparison(newCarbs: 80, settings: settings(), snapshot: s, source: source,
+            samples: readings, newestTreatment: nil, now: now.addingTimeInterval(601)) == nil)
+        #expect(MealReviewFullCalculation.comparison(newCarbs: 80, settings: settings(), snapshot: s, source: source,
+            samples: readings, newestTreatment: now.addingTimeInterval(6), now: now) == nil)
+        #expect(MealReviewFullCalculation.comparison(newCarbs: 80, settings: nil, snapshot: s, source: source,
+            samples: readings, newestTreatment: nil, now: now) == nil)
+        s.effectiveISF = nil
+        #expect(MealReviewFullCalculation.comparison(newCarbs: 80, settings: settings(), snapshot: s, source: source,
+            samples: readings, newestTreatment: nil, now: now) == nil)
+    }
 }
