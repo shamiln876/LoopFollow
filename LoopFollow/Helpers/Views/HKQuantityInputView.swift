@@ -30,6 +30,8 @@ struct HKQuantityInputView: View {
                 onValidationError: onValidationError
             )
             .focused($isFocused)
+            .accessibilityLabel(label)
+            .accessibilityIdentifier("meal-input-" + label.lowercased().replacingOccurrences(of: " ", with: "-"))
             Text(unit.localizedShortUnitString)
                 .foregroundColor(.secondary)
         }
