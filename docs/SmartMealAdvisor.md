@@ -1,6 +1,6 @@
 # Smart Meal Advisor implementation and test guide
 
-This branch implements editable Rice, Pizza, Fruit & Dessert, and Custom presets. It is a development build. No treatments are sent by the Advisor screen.
+This branch combines the currently installed meal dashboard and Carnival guide with editable Rice, Pizza, Fruit & Dessert, and Custom presets. It is delivered as an in-place update of regular LoopFollow, retaining the existing app identity and saved configuration. Nightscout and remote-control settings do not need to be re-entered. No treatments are sent by the Advisor screen.
 
 | Preset | Carbs now | Remaining carbs | Delay | Initial insulin selection |
 |---|---:|---:|---:|---:|
@@ -38,7 +38,7 @@ For a supported single-entry draft, a local write-before-send pending journal bl
 5. To install on an iPhone, select your signing team in Xcode for the app and extension, choose your connected iPhone, enable Developer Mode if prompted, then Build and Run. Installation and signing have not been confirmed by this implementation task. Do not replace a relied-upon production installation without preserving its configuration and confirming the new build separately.
 6. Test handoff/confirmation with a separate non-treatment configuration. Do not tap a live Send Meal to test the feature. No live insulin, carbs, pump settings or remote commands were used during development.
 
-Carnival nutritional autofill and actual bolus/SMB/peak/nadir outcome tracking are deferred. No verified Carnival dataset is bundled. Existing local comparison history remains; it does not establish actual treatment delivery or outcomes.
+The existing offline Carnival guide is retained. Selecting foods fills estimated carbs, protein and fat, rounded to whole grams for remote-entry compatibility. Protein/fat transmission resets to off after selection and requires explicit opt-in. The food guide contains estimates from the previously supplied source, not guaranteed meal composition. Actual bolus/SMB/peak/nadir outcome tracking remains deferred. Existing local comparison history retains food provenance and does not establish actual treatment delivery or outcomes.
 
 ## Verification from this task
 
@@ -48,3 +48,12 @@ Carnival nutritional autofill and actual bolus/SMB/peak/nadir outcome tracking a
 - After explicit user approval, `group.com.D3GG62L9X8.LoopFollowSmartMealTest` was registered and associated with the separate test app and extension. The signed physical-iPhone build succeeded as **Meal Advisor Test**, bundle ID `com.D3GG62L9X8.LoopFollowSmartMealTest`. Temporary local signing edits were restored.
 - Physical installation was confirmed over trusted USB using the Mac’s existing libimobiledevice installer after Apple’s CoreDevice tunnel repeatedly timed out. The installed test app is **Meal Advisor Test 7.1.0 (8)**, bundle ID `com.D3GG62L9X8.LoopFollowSmartMealTest`. A separate installed-app query confirmed the original **LoopFollow 7.1.0 (10)** remains installed under its original bundle ID.
 - Automated physical-device launch could not be verified: the debugserver was unavailable because a developer disk image was not mounted, and Apple’s developer connection remained unreliable. Open Meal Advisor Test on the iPhone for the first launch. No actual authentication flow, remote treatment delivery, receiver batching or clinical efficacy test was performed.
+
+
+## In-place update integration
+
+The installed dashboard build was traced to source revision `80e3f82`. This integration retains that dashboard, its live data pipeline, the offline Carnival catalog and existing app preferences. The Home card is labelled **Smart Meal Advisor**; its compact glucose/IOB/COB summary keeps the preset controls near the top and expands to the full prior dashboard. Home and remote Meal both lead into the same advisor and standard editable Meal confirmation screen.
+
+The update uses the regular app bundle and App Group, with build number 11. No storage-key, connection, alarm, keychain or migration changes are introduced. A private local backup of preferences and Documents was verified before preparing the update. Physical installation and post-update preservation verification are recorded below when complete. Split-carb sending remains held for the receiver dependency described above.
+
+The combined upgrade passed 50 calculation, snapshot, history, food-guide and dashboard tests, plus six presentation tests (56 total). Rendered captures of the integrated advisor and standard editable Meal screen were inspected. The synthetic 80 g / 4.35 U handoff shows both editable values correctly and zero protein/fat. No send or authentication action was invoked during these checks.

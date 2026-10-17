@@ -41,6 +41,16 @@ struct MealView: View {
     @State private var isScheduling: Bool = false
     @State private var showFatProteinOrderBanner = false
 
+    init(initialAdvisorDraft: SmartMealDraft? = nil) {
+        _advisorDraft = State(initialValue: initialAdvisorDraft)
+        if let draft = initialAdvisorDraft {
+            _carbs = State(initialValue: HKQuantity(unit: .gram(), doubleValue: Double(draft.plan.immediateCarbs)))
+            _protein = State(initialValue: HKQuantity(unit: .gram(), doubleValue: draft.protein))
+            _fat = State(initialValue: HKQuantity(unit: .gram(), doubleValue: draft.fat))
+            _bolusAmount = State(initialValue: HKQuantity(unit: .internationalUnit(), doubleValue: draft.plan.upfrontInsulin))
+        }
+    }
+
     enum AlertType {
         case confirmMeal
         case statusSuccess

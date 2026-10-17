@@ -48,7 +48,14 @@ struct MealReviewAuditTests {
         decoder.dateDecodingStrategy = .millisecondsSince1970
         let restored = try decoder.decode(MealReviewAudit.Entry.self, from: data)
         #expect(restored.payload.result == p.result)
-        #expect(restored.payload.settings == p.settings)
+        let expectedSettings = try #require(p.settings)
+        let savedSettings = try #require(restored.payload.settings)
+        // JSON millisecond dates can acquire sub-microsecond floating-point drift.
+        #expect(abs(savedSettings.checkedAt.timeIntervalSince(expectedSettings.checkedAt)) < 0.001)
+        let comparableSettings = MealReviewSettings(percentage: savedSettings.percentage, maxIOB: savedSettings.maxIOB,
+            maxCOB: savedSettings.maxCOB, maxBolus: savedSettings.maxBolus, sourceFingerprint: savedSettings.sourceFingerprint,
+            trioVersion: savedSettings.trioVersion, checkedAt: expectedSettings.checkedAt, historicalReference: savedSettings.historicalReference)
+        #expect(comparableSettings == expectedSettings)
         #expect(abs(restored.evaluatedAt.timeIntervalSince(now)) < 0.001)
     }
 

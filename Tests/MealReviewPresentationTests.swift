@@ -2,6 +2,7 @@
 // MealReviewPresentationTests.swift
 
 import Foundation
+import HealthKit
 @testable import LoopFollow
 import SwiftUI
 import UIKit
@@ -19,7 +20,12 @@ final class MealReviewPresentationTests: XCTestCase {
     }
 
     @MainActor
-    private func captureReview(sizeCategory: ContentSizeCategory, name: String) async throws {
+    func testPrefilledEditableMealScreen() async throws {
+        try await captureReview(sizeCategory: .large, name: "Editable Meal prefill — 80 g and 4.35 U", withDraft: true)
+    }
+
+    @MainActor
+    private func captureReview(sizeCategory: ContentSizeCategory, name: String, withDraft: Bool = false) async throws {
         let previousSnapshot = Observable.shared.mealReview.value
         let previousHistory = Observable.shared.mealReviewGlucose.value
         let previousTreatment = Observable.shared.mealReviewNewestTreatment.value
@@ -51,7 +57,20 @@ final class MealReviewPresentationTests: XCTestCase {
         let auditDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let audit = MealReviewAuditStore(directory: auditDirectory)
         defer { audit.flush(); try? FileManager.default.removeItem(at: auditDirectory) }
-        let controller = UIHostingController(rootView: MealReviewView(initialCarbs: 80, settings: settings, source: source, audit: audit).environment(\.sizeCategory, sizeCategory))
+        let previousLimit = Storage.shared.maxBolus.value
+        defer { Storage.shared.maxBolus.value = previousLimit }
+        let root: AnyView
+        if withDraft {
+            Storage.shared.maxBolus.value = HKQuantity(unit: .internationalUnit(), doubleValue: 10)
+            let plan = try XCTUnwrap(RiceMealPlan(carbs: 80, fullRecommendation: 5.8, upfrontPercent: 75,
+                confirmedAt: now, carbsNowPercent: 100, delayMinutes: 0))
+            let draft = SmartMealDraft(plan: plan, protein: 0, fat: 0, settings: try XCTUnwrap(settings.value),
+                snapshot: snapshot, source: testSource, createdAt: now)
+            root = AnyView(MealView(initialAdvisorDraft: draft).environment(\.sizeCategory, sizeCategory))
+        } else {
+            root = AnyView(MealReviewView(initialCarbs: 80, settings: settings, source: source, audit: audit).environment(\.sizeCategory, sizeCategory))
+        }
+        let controller = UIHostingController(rootView: root)
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first { $0 is UIWindowScene } as? UIWindowScene)
         let previousWindow = scene.windows.first { $0.isKeyWindow }
         let window = UIWindow(windowScene: scene)
