@@ -14,6 +14,7 @@ struct MealReviewSettings: Codable, Equatable {
     let trioVersion: String
     let checkedAt: Date
     let historicalReference: String?
+    var receiverConfigurationID: String? = nil
 
     init(percentage: Double, maxIOB: Double, maxCOB: Double, maxBolus: Double, sourceFingerprint: String, trioVersion: String, checkedAt: Date, historicalReference: String? = nil) {
         self.percentage = percentage

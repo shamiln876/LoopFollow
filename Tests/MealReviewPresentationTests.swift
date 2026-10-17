@@ -40,12 +40,17 @@ final class MealReviewPresentationTests: XCTestCase {
     }
 
     @MainActor
+    func testEditedBolusHandoffCopiesExactUnits() async throws {
+        try await captureReview(sizeCategory: .large, name: "Edited bolus — exact handoff", checkTransfer: true, manualBolus: 0.65, withReceiver: true)
+    }
+
+    @MainActor
     func testHistoricalSettingsCannotTransferDose() async throws {
         try await captureReview(sizeCategory: .accessibilityLarge, name: "Historical settings — actionable hold", checkSettingsAction: true)
     }
 
     @MainActor
-    private func captureReview(sizeCategory: ContentSizeCategory, name: String, withDraft: Bool = false, lowForecast: Bool = false, checkAuditClock: Bool = false, checkTransfer: Bool = false, checkSettingsAction: Bool = false) async throws {
+    private func captureReview(sizeCategory: ContentSizeCategory, name: String, withDraft: Bool = false, lowForecast: Bool = false, checkAuditClock: Bool = false, checkTransfer: Bool = false, checkSettingsAction: Bool = false, manualBolus: Double? = nil, withReceiver: Bool = false) async throws {
         let previousSnapshot = Observable.shared.mealReview.value
         let previousHistory = Observable.shared.mealReviewGlucose.value
         let previousTreatment = Observable.shared.mealReviewNewestTreatment.value
@@ -67,6 +72,12 @@ final class MealReviewPresentationTests: XCTestCase {
         snapshot.reportedBolusIncrement = 0.05
         snapshot.pumpDate = now
         snapshot.uploadUnitSource = "Trio mg/dL fields"
+        if withReceiver {
+            let config = SmartMealConfiguration(percentage: 80, maxIOB: 15, maxCOB: 120, maxBolus: 10,
+                maxCarbs: 150, maxFat: 100, maxProtein: 100, bolusIncrement: 0.05)
+            snapshot.smartMeal = SmartMealReceiverStatus(protocolVersion: 1, generatedAt: now.timeIntervalSince1970,
+                calculationAt: now.timeIntervalSince1970, bundleIdentifier: "test.trio", enabled: true, configuration: config, receipts: [])
+        }
         Observable.shared.mealReview.value = snapshot
         Observable.shared.mealReviewGlucose.value = [.init(date: now.addingTimeInterval(-900), mgdl: 175), .init(date: now, mgdl: 180)]
         Observable.shared.mealReviewNewestTreatment.value = nil
@@ -74,6 +85,14 @@ final class MealReviewPresentationTests: XCTestCase {
         let source = StorageValue<String>(key: "test_meal_review_source", defaultValue: testSource)
         let settings = StorageValue<MealReviewSettings?>(key: "test_meal_review_settings", defaultValue: .init(percentage: 80, maxIOB: 15, maxCOB: 120, maxBolus: 10, sourceFingerprint: MealReviewSettings.fingerprint(testSource), trioVersion: "1.0.2", checkedAt: now, historicalReference: sizeCategory == .accessibilityLarge ? "Synthetic historical fixture; not verified current." : nil))
         defer { source.remove(); settings.remove() }
+        let previousBundle = Storage.shared.bundleId.value
+        let previousCarbLimit = Storage.shared.maxCarbs.value
+        defer { Storage.shared.bundleId.value = previousBundle; Storage.shared.maxCarbs.value = previousCarbLimit }
+        Storage.shared.maxCarbs.value = HKQuantity(unit: .gram(), doubleValue: 150)
+        if withReceiver {
+            Storage.shared.bundleId.value = "test.trio"
+            settings.value = SmartMealDelivery.liveSettings(snapshot: snapshot, source: testSource, bundleID: "test.trio", now: now)
+        }
         let auditDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let audit = MealReviewAuditStore(directory: auditDirectory)
         defer { audit.flush(); try? FileManager.default.removeItem(at: auditDirectory) }
@@ -91,7 +110,7 @@ final class MealReviewPresentationTests: XCTestCase {
                 snapshot: snapshot, source: testSource, createdAt: now)
             root = AnyView(MealView(initialAdvisorDraft: draft).environment(\.sizeCategory, sizeCategory))
         } else {
-            let advisor = MealReviewView(initialCarbs: 80, settings: settings, source: source, audit: audit, onUse: { transferred = $0 })
+            let advisor = MealReviewView(initialCarbs: 80, initialBolus: manualBolus, settings: settings, source: source, audit: audit, onUse: { transferred = $0 })
             review = advisor
             root = AnyView(advisor.environment(\.sizeCategory, sizeCategory))
         }
@@ -115,7 +134,8 @@ final class MealReviewPresentationTests: XCTestCase {
             XCTAssertEqual(draft.fat, 0)
             let full = try XCTUnwrap(MealReviewFullCalculation.review(newCarbs: 80, settings: settings.value, snapshot: snapshot, source: testSource, samples: Observable.shared.mealReviewGlucose.value, newestTreatment: nil, now: Date()))
             XCTAssertEqual(draft.plan.fullRecommendation, full.rounded)
-            XCTAssertEqual(draft.plan.upfrontInsulin, 6.65, accuracy: 0.00001)
+            XCTAssertEqual(draft.plan.upfrontInsulin, manualBolus ?? 6.65, accuracy: 0.00001)
+            XCTAssertEqual(draft.plan.usesManualBolus, manualBolus != nil)
             XCTAssertNotEqual(draft.plan.upfrontInsulin, full.rounded)
         }
         if checkSettingsAction {

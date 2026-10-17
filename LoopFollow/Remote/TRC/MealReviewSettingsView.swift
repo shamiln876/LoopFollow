@@ -40,7 +40,7 @@ struct MealReviewSettingsView: View {
                     numberRow("Trio Maximum Bolus (U)", $maxBolus)
                     Toggle("I checked these values in current Trio on Omnipod DASH", isOn: $checked)
                     if !checked {
-                        Text("Check the four values in Trio before enabling transfer. Nightscout uploads glucose, IOB and COB but does not upload these calculator settings. Saving without checking keeps comparison only.").foregroundStyle(.orange)
+                        Text("The updated Trio receiver supplies current settings automatically. With an older Trio build, check these four values in Trio before enabling transfer. Saving without checking keeps comparison only.").foregroundStyle(.orange)
                     }
                 }
                 Section("Where to find them in Trio") {

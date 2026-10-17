@@ -5,10 +5,10 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/smart-meal-core.XXXXXX")"
 trap 'rm -rf "$test_root"' EXIT
 mkdir -p "$test_root/Sources/LoopFollow" "$test_root/Tests/LoopFollowTests"
-for name in RiceMealPlan MealReviewSettings MealReviewSnapshot MealReviewCalculation MealReviewFullCalculation; do
+for name in RiceMealPlan MealReviewSettings MealReviewSnapshot MealReviewCalculation MealReviewFullCalculation SmartMealProtocol SmartMealDelivery PushMessage TRCCommandType; do
     cp "$repo_root/LoopFollow/Remote/TRC/$name.swift" "$test_root/Sources/LoopFollow/"
 done
-for name in RiceMealPlanTests MealReviewCalculationTests MealReviewSnapshotTests MealReviewFullCalculationTests; do
+for name in RiceMealPlanTests MealReviewCalculationTests MealReviewSnapshotTests MealReviewFullCalculationTests SmartMealDeliveryTests; do
     cp "$repo_root/Tests/$name.swift" "$test_root/Tests/LoopFollowTests/"
 done
 cat > "$test_root/Package.swift" <<'PACKAGE'

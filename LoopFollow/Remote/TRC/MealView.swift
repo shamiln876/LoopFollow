@@ -10,6 +10,8 @@ struct MealView: View {
     @State private var showMealReview = false
     @State private var advisorDraft: SmartMealDraft?
     @State private var advisorAttempted = false
+    @ObservedObject private var liveMealSnapshot = Observable.shared.mealReview
+    @State private var advisorReceipt = SmartMealSendJournal.shared.lastReceipt(source: Storage.shared.url.value)
     @State private var isAuthenticating = false
     @State private var advisorUnresolved = SmartMealSendJournal.shared.hasPending(source: Storage.shared.url.value)
     @State private var carbs = HKQuantity(unit: .gram(), doubleValue: 0.0)
@@ -68,18 +70,33 @@ struct MealView: View {
                     }
                     if advisorUnresolved {
                         Section("Previous advisor send needs checking") {
-                            Text("Check Trio and Nightscout for the actual meal and insulin before another advisor send. APNs acceptance does not confirm delivery.")
-                            Button("I checked Trio/Nightscout · allow a new review") {
-                                if SmartMealSendJournal.shared.reconcile(source: Storage.shared.url.value) {
-                                    advisorUnresolved = false
+                            if SmartMealSendJournal.shared.pendingRequest(source: Storage.shared.url.value) != nil {
+                                Text("Waiting for Trio's transaction receipt. Check actual carb entries and insulin in Trio/Nightscout. For an uncertain receiver result, acknowledge the check in Trio → Settings → Remote Control. Do not repeat this meal.")
+                                Button("I checked treatments · clear expired sender attempt") {
+                                    if SmartMealSendJournal.shared.reconcile(source: Storage.shared.url.value) { advisorUnresolved = false }
+                                }
+                                Text("Available only after this command expires. Trio still blocks a new meal until any uncertain receiver transaction is checked.").font(.footnote)
+                            } else {
+                                Text("Check Trio and Nightscout for the actual meal and insulin before another advisor send. APNs acceptance does not confirm delivery.")
+                                Button("I checked Trio/Nightscout · allow a new review") {
+                                    if SmartMealSendJournal.shared.reconcile(source: Storage.shared.url.value) { advisorUnresolved = false }
                                 }
                             }
                         }
                     }
+                    if let receipt = advisorReceipt {
+                        Section("Trio meal result") {
+                            Text(receipt.message)
+                            Text("Carbs: \(receipt.request.immediateCarbs) g now · \(receipt.request.delayedCarbs) g later. No later insulin bolus.").font(.footnote)
+                        }
+                    }
                     if let draft = advisorDraft {
                         Section("Smart Meal Advisor draft") {
-                            Text("Carbs now: \(draft.plan.immediateCarbs) g · later: \(draft.plan.delayedCarbs) g. Selected insulin: \(InsulinFormatter.shared.string(draft.plan.upfrontInsulin)) U")
-                            if draft.plan.delayedCarbs > 0 { Text(RiceMealPlan.sendingBlocker).foregroundStyle(.orange) }
+                            Text("Carbs now: \(draft.plan.immediateCarbs) g · later: \(draft.plan.delayedCarbs) g. Selected insulin: \(InsulinFormatter.shared.string(bolusAmount.doubleValue(for: .internationalUnit()))) U")
+                            if draft.plan.delayedCarbs > 0 {
+                                Text("Later carbs: +\(Int(draft.plan.delayMinutes)) minutes. Insulin later: none.")
+                                if !batchAvailable { Text(RiceMealPlan.sendingBlocker).foregroundStyle(.orange) }
+                            }
                             Text("Draft expires after two minutes or a new Trio snapshot. Review again if held.").font(.footnote)
                             Button("Discard advisor draft") {
                                 advisorDraft = nil
@@ -262,7 +279,10 @@ struct MealView: View {
                 .navigationBarTitleDisplayMode(.inline)
             }
             .sheet(isPresented: $showMealReview) {
-                MealReviewView(initialCarbs: advisorDraft.map { Double($0.plan.immediateCarbs + $0.plan.delayedCarbs) } ?? carbs.doubleValue(for: .gram()), onUse: { draft in
+                MealReviewView(initialCarbs: advisorDraft.map { Double($0.plan.immediateCarbs + $0.plan.delayedCarbs) } ?? carbs.doubleValue(for: .gram()), initialBolus: advisorDraft.flatMap { draft in
+                    let current = bolusAmount.doubleValue(for: .internationalUnit())
+                    return draft.plan.usesManualBolus || current != draft.plan.upfrontInsulin ? current : nil
+                }, initialPlan: advisorDraft?.plan, onUse: { draft in
                     advisorDraft = draft
                     advisorAttempted = false
                     carbs = HKQuantity(unit: .gram(), doubleValue: Double(draft.plan.immediateCarbs))
@@ -272,6 +292,10 @@ struct MealView: View {
                     isScheduling = false
                     selectedTime = nil
                 })
+            }
+            .onChange(of: liveMealSnapshot.value) { _, _ in
+                advisorUnresolved = SmartMealSendJournal.shared.hasPending(source: Storage.shared.url.value)
+                advisorReceipt = SmartMealSendJournal.shared.lastReceipt(source: Storage.shared.url.value)
             }
             .onAppear {
                 selectedTime = nil
@@ -309,6 +333,10 @@ struct MealView: View {
                         message += String(format: "\nCarbs: %.0f g", carbsAmount)
                     }
 
+                    if let draft = advisorDraft, draft.plan.delayedCarbs > 0 {
+                        message += "\nLater carbs: \(draft.plan.delayedCarbs) g at +\(Int(draft.plan.delayMinutes)) min"
+                        message += "\nNo later insulin bolus."
+                    }
                     if proteinAmount > 0 {
                         message += String(format: "\nProtein: %.0f g", proteinAmount)
                     }
@@ -382,15 +410,25 @@ struct MealView: View {
         }
     }
 
+    private var batchAvailable: Bool {
+        SmartMealDelivery.available(snapshot: liveMealSnapshot.value, settings: Storage.shared.mealReviewSettings.value,
+            bundleID: Storage.shared.bundleId.value, now: Date())
+    }
+
     private var isButtonDisabled: Bool {
-        return isLoading || isAuthenticating || (advisorDraft?.plan.delayedCarbs ?? 0) > 0 || advisorAttempted || (advisorDraft != nil && advisorUnresolved)
+        let requiresReceiver = advisorDraft.map { $0.plan.delayedCarbs > 0 || $0.settings.receiverConfigurationID != nil } ?? false
+        return isLoading || isAuthenticating || (requiresReceiver && !batchAvailable)
+            || advisorAttempted || (advisorDraft != nil && advisorUnresolved)
     }
 
     private func sendMealCommand() {
         guard !isLoading else { return }
+        var smartRequest: SmartMealRequest?
         if let draft = advisorDraft {
             let current = Date()
-            guard !advisorAttempted, draft.plan.delayedCarbs == 0, !isScheduling,
+            // A receiver-backed draft must never downgrade to the legacy command.
+            guard !advisorAttempted,
+                  ((draft.plan.delayedCarbs == 0 && draft.settings.receiverConfigurationID == nil) || batchAvailable), !isScheduling,
                   draft.isCurrent(now: current, settings: Storage.shared.mealReviewSettings.value,
                                   snapshot: Observable.shared.mealReview.value, source: Storage.shared.url.value),
                   MealReviewCalculation.reasons(snapshot: Observable.shared.mealReview.value,
@@ -405,13 +443,25 @@ struct MealView: View {
                   protein.doubleValue(for: .gram()) <= maxProtein.value.doubleValue(for: .gram()),
                   fat.doubleValue(for: .gram()) <= maxFat.value.doubleValue(for: .gram()),
                   carbs.doubleValue(for: .gram()) <= maxCarbs.value.doubleValue(for: .gram()) else {
-                alertMessage = "Advisor draft held. Split meals are unavailable; changed carbs, stale data or settings require a fresh review. Nothing sent."
+                alertMessage = "Advisor draft held. Changed carbs, stale inputs/settings or missing Trio capability require a fresh review. Nothing sent."
                 alertType = .validationError
                 showAlert = true
                 return
             }
-            // A failed transport may already have reached Trio. Never automatically retry a draft.
-            guard SmartMealSendJournal.shared.claim(source: draft.source) else {
+            if batchAvailable {
+                smartRequest = SmartMealDelivery.request(draft: draft, bolus: bolusAmount.doubleValue(for: .internationalUnit()),
+                    protein: protein.doubleValue(for: .gram()), fat: fat.doubleValue(for: .gram()),
+                    snapshot: liveMealSnapshot.value, settings: Storage.shared.mealReviewSettings.value,
+                    bundleID: Storage.shared.bundleId.value, now: current)
+                guard smartRequest != nil else {
+                    alertMessage = "Smart meal held: invalid meal values or changed receiver settings. Review again. Nothing sent."
+                    alertType = .validationError; showAlert = true; return
+                }
+            }
+            // Persist before transport. Neither timeout nor APNs acceptance permits a blind retry.
+            let claimed = smartRequest.map { SmartMealSendJournal.shared.claim(request: $0, source: draft.source) }
+                ?? SmartMealSendJournal.shared.claim(source: draft.source)
+            guard claimed else {
                 advisorUnresolved = true
                 alertMessage = "Advisor send held: an earlier attempt needs checking, or its pending record could not be saved. Nothing sent."
                 alertType = .validationError
@@ -435,18 +485,13 @@ struct MealView: View {
                                           of: now) ?? now
         }
 
-        pushNotificationManager.sendMealPushNotification(
-            carbs: carbs,
-            protein: protein,
-            fat: fat,
-            bolusAmount: bolusAmount,
-            scheduledTime: scheduledDate
-        ) { success, errorMessage in
+        let isSmartMeal = smartRequest != nil
+        let completion: (Bool, String?) -> Void = { success, errorMessage in
             DispatchQueue.main.async {
                 isLoading = false
                 if success {
                     let sentCarbs = carbs.doubleValue(for: .gram())
-                    if sentCarbs > 0 {
+                    if sentCarbs > 0 && !isSmartMeal {
                         QuickPickMealsManager.shared.recordMeal(
                             carbs: sentCarbs,
                             fat: fat.doubleValue(for: .gram()),
@@ -454,7 +499,9 @@ struct MealView: View {
                             bolus: bolusAmount.doubleValue(for: .internationalUnit())
                         )
                     }
-                    statusMessage = RemoteCommandMessage.sent
+                    statusMessage = isSmartMeal
+                        ? "Request sent. Waiting for Trio to confirm meal entries and upfront bolus initiation. Nothing is confirmed by APNs acceptance alone."
+                        : RemoteCommandMessage.sent
                     LogManager.shared.log(
                         category: .apns,
                         message: "sendMealPushNotification succeeded - Carbs: \(carbs.doubleValue(for: .gram())) g, Protein: \(protein.doubleValue(for: .gram())) g, Fat: \(fat.doubleValue(for: .gram())) g, Bolus: \(bolusAmount.doubleValue(for: .internationalUnit())) U, Scheduled: \(scheduledDate != nil ? formatDate(scheduledDate!) : "now")"
@@ -477,6 +524,12 @@ struct MealView: View {
                 }
                 showAlert = true
             }
+        }
+        if let smartRequest {
+            pushNotificationManager.sendSmartMealPushNotification(request: smartRequest, completion: completion)
+        } else {
+            pushNotificationManager.sendMealPushNotification(carbs: carbs, protein: protein, fat: fat,
+                bolusAmount: bolusAmount, scheduledTime: scheduledDate, completion: completion)
         }
     }
 

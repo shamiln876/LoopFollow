@@ -25,6 +25,7 @@ struct MealReviewSnapshot: Codable, Equatable {
     var calculationIOB: Double? = nil
     var reportedBolusIncrement: Double? = nil
     var pumpDate: Date? = nil
+    var smartMeal: SmartMealReceiverStatus? = nil
 
     enum TrendNotice {
         case downwardArrow
@@ -120,6 +121,9 @@ struct MealReviewSnapshot: Codable, Equatable {
         snapshot.calculationIOB = number(calculation["IOB"])
         snapshot.nativeRecommendation = number(record["recommendedBolus"]).flatMap { $0 >= 0 ? $0 : nil }
         snapshot.trioVersion = record["version"] as? String
+        if let status = record["smartMeal"], let data = try? JSONSerialization.data(withJSONObject: status) {
+            snapshot.smartMeal = try? JSONDecoder().decode(SmartMealReceiverStatus.self, from: data)
+        }
         if let factor { snapshot.uploadUnitSource = factor == 1 ? "Trio mg/dL fields" : "Trio mmol/L fields" }
         if let predictions = calculation["predBGs"] as? [String: Any] {
             for name in ["IOB", "COB", "UAM", "ZT"] {

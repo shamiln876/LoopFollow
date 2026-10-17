@@ -2,6 +2,21 @@ import Foundation
 @testable import LoopFollow
 import Testing
 struct RiceMealPlanTests {
+    @Test func editedUnitsReplaceSuggestedUnitsWithoutApplyingPercentageAgain() throws {
+        let now = Date()
+        let manual = try #require(RiceMealPlan(carbs: 80, fullRecommendation: 5.8, upfrontPercent: 75,
+            confirmedAt: now, upfrontInsulinOverride: 0.65))
+        #expect(manual.upfrontInsulin == 0.65)
+        #expect(manual.suggestedUpfrontInsulin == 4.35)
+        #expect(manual.usesManualBolus)
+        #expect(manual.fullRecommendation == 5.8)
+        #expect(manual.immediateCarbs == 60 && manual.delayedCarbs == 20)
+        for invalid in [Double.nan, .infinity, -0.05, 0.67, 30.05] {
+            #expect(RiceMealPlan(carbs: 80, fullRecommendation: 5.8, upfrontPercent: 75, confirmedAt: now, upfrontInsulinOverride: invalid) == nil)
+        }
+        #expect(RiceMealPlan(carbs: 80, fullRecommendation: 5.8, upfrontPercent: 75, confirmedAt: now, upfrontInsulinOverride: 0)?.upfrontInsulin == 0)
+    }
+
     @Test func previewInvariants() {
         let date = Date(timeIntervalSince1970: 1_700_000_000)
         func plan(_ carbs: Double, _ full: Double = 5.8, _ percent: Double = 75) -> RiceMealPlan? {
