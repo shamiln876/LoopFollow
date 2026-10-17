@@ -2,7 +2,6 @@
 // MealDashboardView.swift
 
 import Charts
-import Combine
 import HealthKit
 import SwiftUI
 
@@ -13,26 +12,26 @@ struct MealDashboardHomeCard: View {
     @ObservedObject private var newestTreatment = Observable.shared.mealReviewNewestTreatment
     @ObservedObject private var settings = Storage.shared.mealReviewSettings
     @ObservedObject private var source = Storage.shared.url
-    @State private var now = Date()
     @State private var presented = false
     @State private var mealPresented = false
     @State private var advisorDraft: SmartMealDraft?
 
     var body: some View {
-        let status = MealDashboardStatus(snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, settings: settings.value, source: source.value, now: now)
-        Button { advisorDraft = nil; presented = true } label: {
-            MealDashboardHomeLabel(status: status, snapshot: snapshot.value, now: now)
+        TimelineView(.periodic(from: .now, by: 5)) { _ in
+            let now = Date()
+            let status = MealDashboardStatus(snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, settings: settings.value, source: source.value, now: now)
+            Button { advisorDraft = nil; presented = true } label: {
+                MealDashboardHomeLabel(status: status, snapshot: snapshot.value, now: now)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("home-meal-dashboard")
+            .sheet(isPresented: $presented, onDismiss: {
+                if advisorDraft != nil { mealPresented = true }
+            }) {
+                MealReviewView(initialCarbs: 0, onUse: { advisorDraft = $0 })
+            }
+            .sheet(isPresented: $mealPresented) { MealView(initialAdvisorDraft: advisorDraft) }
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("home-meal-dashboard")
-        .sheet(isPresented: $presented, onDismiss: {
-            if advisorDraft != nil { mealPresented = true }
-        }) {
-            MealReviewView(initialCarbs: 0, onUse: { advisorDraft = $0 })
-        }
-        .sheet(isPresented: $mealPresented) { MealView(initialAdvisorDraft: advisorDraft) }
-        .onAppear { now = Date() }
-        .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { now = $0 }
     }
 }
 

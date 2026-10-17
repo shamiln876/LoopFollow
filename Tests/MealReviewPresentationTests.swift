@@ -30,7 +30,12 @@ final class MealReviewPresentationTests: XCTestCase {
     }
 
     @MainActor
-    private func captureReview(sizeCategory: ContentSizeCategory, name: String, withDraft: Bool = false, lowForecast: Bool = false) async throws {
+    func testAuditUsesCurrentTimeAfterLiveInputUpdate() async throws {
+        try await captureReview(sizeCategory: .large, name: "Fresh upload — current evaluation time", checkAuditClock: true)
+    }
+
+    @MainActor
+    private func captureReview(sizeCategory: ContentSizeCategory, name: String, withDraft: Bool = false, lowForecast: Bool = false, checkAuditClock: Bool = false) async throws {
         let previousSnapshot = Observable.shared.mealReview.value
         let previousHistory = Observable.shared.mealReviewGlucose.value
         let previousTreatment = Observable.shared.mealReviewNewestTreatment.value
@@ -85,6 +90,24 @@ final class MealReviewPresentationTests: XCTestCase {
         defer { window.isHidden = true; previousWindow?.makeKeyAndVisible() }
         try await Task.sleep(nanoseconds: 500_000_000)
         controller.view.layoutIfNeeded()
+        if checkAuditClock {
+            var updated = try XCTUnwrap(Observable.shared.mealReview.value)
+            updated.activity = 0.011
+            Observable.shared.mealReview.value = updated
+            // New data must be evaluated at capture time, not at the last
+            // display-timer tick (which can remain frozen while suspended).
+            try await Task.sleep(nanoseconds: 1_500_000_000)
+            audit.flush()
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .millisecondsSince1970
+            let files = try FileManager.default.contentsOfDirectory(at: auditDirectory, includingPropertiesForKeys: nil)
+            let records = try files.filter { $0.pathExtension == "jsonl" }.flatMap { file in
+                try Data(contentsOf: file).split(separator: 0x0A).map { try decoder.decode(MealReviewAudit.Entry.self, from: Data($0)) }
+            }
+            let record = try XCTUnwrap(records.last)
+            XCTAssertLessThan(abs(record.capturedAt.timeIntervalSince(record.evaluatedAt)), 0.1)
+            XCTAssertFalse(record.payload.holdReasons.contains { $0.contains("future timestamp") || $0.contains("calculation is missing or stale") })
+        }
         if lowForecast {
             func scrollViews(in view: UIView) -> [UIScrollView] {
                 (view as? UIScrollView).map { [$0] } ?? view.subviews.flatMap { scrollViews(in: $0) }

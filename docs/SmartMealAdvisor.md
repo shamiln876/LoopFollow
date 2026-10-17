@@ -84,3 +84,9 @@ Validation: 34 isolated core tests passed. The combined simulator run passed all
 A focused presentation rerun also passed after scrolling to the calculation section. Its rendered capture was inspected: both the full comparison and percentage-selected amount are visible alongside the explicit low-forecast hold, with no copied-recommendation field.
 
 Regular iPhone deployment completed through the developer `.app` installer with `InstallComplete (100%)`. An independent query confirmed **LoopFollow 7.1.0 (12)** under the original bundle ID. All signing entitlements matched build 11, and the signature passed strict verification. A post-install preferences download confirmed all 34 selected existing configuration keys unchanged and no original keys missing. Build 11 was retained locally for rollback. No live meal/insulin command, authentication or pump-setting change was tested. Saved historical settings remain historical; their verification must reflect actual current Trio values, not this installation.
+
+## Freshness-clock correction (build 13)
+
+A retained review could receive a new Trio upload while its last display-timer date remained frozen. The cached reference date then made a fresh calculation appear future-dated, producing the misleading missing/stale message. The same timer pattern existed in the Home card. This was distinguished from a real upload outage by comparing actual upload timestamps with the local review's capture and evaluation timestamps.
+
+Both views now use a SwiftUI periodic timeline and evaluate against the current wall-clock time whenever rendered, including after new input or resuming the screen. Audit captures independently take a current evaluation timestamp rather than copying the last display tick. All existing ten-minute freshness, future-clock, matched-input and historical-settings guards remain unchanged. No stale data are relabelled fresh and no dose calculation or therapy setting is altered.

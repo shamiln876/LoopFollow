@@ -2,7 +2,6 @@
 // MealReviewView.swift
 
 import Charts
-import Combine
 import HealthKit
 import SwiftUI
 
@@ -18,7 +17,6 @@ struct MealReviewView: View {
     private let onUse: ((SmartMealDraft) -> Void)?
     @State private var customPercent = "75"
     @State private var carbText: String
-    @State private var now = Date()
     @State private var settingsPresented = false
     @State private var foodPresented = false
     @State private var foodMeal: CarnivalMeal?
@@ -48,66 +46,72 @@ struct MealReviewView: View {
 
     var body: some View {
         NavigationView {
-            Form {
-                Section("At a glance") {
-                    MealDashboardCompactOverview(status: MealDashboardStatus(snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, settings: settings.value, source: source.value, now: now), snapshot: snapshot.value, sensorArrow: trend.value, now: now, hasMeal: carbs.map { $0.isFinite && $0 > 0 } == true)
-                }
-                Section("Your meal") {
-                    Text("Enter carbs to review. Values update automatically. This screen cannot send carbs or insulin. A verified draft can prefill the standard Meal confirmation screen.")
-                    HStack {
-                        Text("Meal carbs (g)")
-                        TextField("Amount", text: $carbText)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .focused($carbsFocused)
-                            .accessibilityLabel("Meal carbs in grams")
+            TimelineView(.periodic(from: .now, by: 5)) { _ in
+                // A retained/paused screen must not compare a new upload with
+                // its old timer value. Always evaluate against wall-clock time.
+                let now = Date()
+                Form {
+                    Section("At a glance") {
+                        MealDashboardCompactOverview(status: MealDashboardStatus(snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, settings: settings.value, source: source.value, now: now), snapshot: snapshot.value, sensorArrow: trend.value, now: now, hasMeal: carbs.map { $0.isFinite && $0 > 0 } == true)
                     }
-                    if carbsFocused { Button("Hide keyboard") { carbsFocused = false } }
-                    Button("Carnival food & portions") { carbsFocused = false; foodPresented = true }
-                    if let foodMeal {
-                        DisclosureGroup("Selected foods · \(foodMeal.items.count)") {
-                            ForEach(foodMeal.items) { item in
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(item.food.name).font(.subheadline.weight(.semibold))
-                                    Text("\(CarnivalNumber.text(item.portions)) × \(item.food.portion)").font(.caption)
+                    Section("Your meal") {
+                        Text("Enter carbs to review. Values update automatically. This screen cannot send carbs or insulin. A verified draft can prefill the standard Meal confirmation screen.")
+                        HStack {
+                            Text("Meal carbs (g)")
+                            TextField("Amount", text: $carbText)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .focused($carbsFocused)
+                                .accessibilityLabel("Meal carbs in grams")
+                        }
+                        if carbsFocused { Button("Hide keyboard") { carbsFocused = false } }
+                        Button("Carnival food & portions") { carbsFocused = false; foodPresented = true }
+                        if let foodMeal {
+                            DisclosureGroup("Selected foods · \(foodMeal.items.count)") {
+                                ForEach(foodMeal.items) { item in
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(item.food.name).font(.subheadline.weight(.semibold))
+                                        Text("\(CarnivalNumber.text(item.portions)) × \(item.food.portion)").font(.caption)
+                                    }
                                 }
+                                Text("Estimated nutrition from the Carnival guide, rounded to whole grams for meal entry. Protein and fat are included only if explicitly selected. Changing carbs manually clears this food record.")
+                                    .font(.footnote).foregroundStyle(.secondary)
                             }
-                            Text("Estimated nutrition from the Carnival guide, rounded to whole grams for meal entry. Protein and fat are included only if explicitly selected. Changing carbs manually clears this food record.")
-                                .font(.footnote).foregroundStyle(.secondary)
-                        }
-                        if let low = foodMeal.total(\.low), let high = foodMeal.total(\.high) {
-                            Text("Food planning range: \(CarnivalNumber.text(low))–\(CarnivalNumber.text(high)) g carbs. Not guaranteed bounds.").font(.footnote)
+                            if let low = foodMeal.total(\.low), let high = foodMeal.total(\.high) {
+                                Text("Food planning range: \(CarnivalNumber.text(low))–\(CarnivalNumber.text(high)) g carbs. Not guaranteed bounds.").font(.footnote)
+                            }
                         }
                     }
-                }
-                presetSection
-                fullSection(now: now)
-                nutrientsSection
-                Section("Recent glucose") { MealDashboardGlucoseChart(samples: history.value, now: now) }
-                activitySection(now: now)
-                contextSection(now: now)
-                forecastSection(now: now)
-                Section("Comparison limitations") {
-                    Text("The calculation uses all meal carbs, then applies your saved Trio percentage and limits, followed by the selected upfront percentage. No recommendation needs to be typed. Historical settings and safety holds allow comparison only; they cannot enable dose prefill.")
-                    DisclosureGroup("What the model includes") {
-                        Text("New carbs and existing estimated COB are divided by Trio's active carb ratio. Glucose correction and recent glucose change use the reported effective ISF. Remaining net IOB is subtracted once. IOB and activity are relative to scheduled basal; negative values can represent a basal deficit. This review does not model absorption of the new meal, future SMBs, future ISF changes, or delivery that has not yet reached Nightscout. Uploaded predictions can be wrong. Use Prefill to transfer a local draft; confirmation and authentication occur on the Meal screen.")
-                            .font(.footnote)
+                    presetSection
+                    fullSection(now: now)
+                    nutrientsSection
+                    Section("Recent glucose") { MealDashboardGlucoseChart(samples: history.value, now: now) }
+                    activitySection(now: now)
+                    contextSection(now: now)
+                    forecastSection(now: now)
+                    Section("Comparison limitations") {
+                        Text("The calculation uses all meal carbs, then applies your saved Trio percentage and limits, followed by the selected upfront percentage. No recommendation needs to be typed. Historical settings and safety holds allow comparison only; they cannot enable dose prefill.")
+                        DisclosureGroup("What the model includes") {
+                            Text("New carbs and existing estimated COB are divided by Trio's active carb ratio. Glucose correction and recent glucose change use the reported effective ISF. Remaining net IOB is subtracted once. IOB and activity are relative to scheduled basal; negative values can represent a basal deficit. This review does not model absorption of the new meal, future SMBs, future ISF changes, or delivery that has not yet reached Nightscout. Uploaded predictions can be wrong. Use Prefill to transfer a local draft; confirmation and authentication occur on the Meal screen.")
+                                .font(.footnote)
+                        }
+                    }
+                    Section("Comparison history") {
+                        Text("Displayed comparisons and their inputs are saved on this iPhone for up to 14 days, for review alongside actual Nightscout deliveries. A saved comparison does not confirm insulin was given.").font(.footnote)
+                        if auditFailed { warning("Comparison history could not be saved. Keep a screenshot of this review.") }
                     }
                 }
-                Section("Comparison history") {
-                    Text("Displayed comparisons and their inputs are saved on this iPhone for up to 14 days, for review alongside actual Nightscout deliveries. A saved comparison does not confirm insulin was given.").font(.footnote)
-                    if auditFailed { warning("Comparison history could not be saved. Keep a screenshot of this review.") }
+                .scrollDismissesKeyboard(.interactively)
+                .navigationTitle("Smart Meal Advisor")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button("Close") { dismiss() } }
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Hide keyboard") { carbsFocused = false }
+                    }
                 }
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .navigationTitle("Smart Meal Advisor")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Close") { dismiss() } }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Hide keyboard") { carbsFocused = false }
-                }
+                .onChange(of: now) { _, _ in scheduleAudit() }
             }
         }
         .sheet(isPresented: $settingsPresented) { MealReviewSettingsView(saved: settings, source: source) }
@@ -121,8 +125,7 @@ struct MealReviewView: View {
                 sendFatProtein = false
             }
         }
-        .onAppear { MealReviewSettingsImport.consumePending(); now = Date(); scheduleAudit() }
-        .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { now = $0; scheduleAudit() }
+        .onAppear { MealReviewSettingsImport.consumePending(); scheduleAudit() }
         .onChange(of: carbText) { _, _ in
             if let total = foodMeal?.carbsForReview, carbs.map({ abs($0 - total.rounded()) < 0.000001 }) != true { foodMeal = nil }
             scheduleAudit()
@@ -144,7 +147,7 @@ struct MealReviewView: View {
 
     private func makePlan(full: Double) -> RiceMealPlan? {
         guard let carbs, let percent = selectedPercent, let nowPercent = Double(carbsNowText), let delay = Double(delayText) else { return nil }
-        return RiceMealPlan(carbs: carbs, fullRecommendation: full, upfrontPercent: percent, confirmedAt: now, carbsNowPercent: nowPercent, delayMinutes: delay)
+        return RiceMealPlan(carbs: carbs, fullRecommendation: full, upfrontPercent: percent, confirmedAt: Date(), carbsNowPercent: nowPercent, delayMinutes: delay)
     }
 
     @ViewBuilder
@@ -193,6 +196,7 @@ struct MealReviewView: View {
     }
 
     private func recordAudit(kind: MealReviewAudit.Entry.Kind) {
+        let now = Date()
         guard let payload = MealReviewAudit.Payload.capture(carbs: carbs, source: source.value, settings: settings.value, snapshot: snapshot.value, glucose: history.value, newestTreatment: newestTreatment.value, sensorArrow: trend.value, now: now, foodMeal: foodMeal) else { return }
         let details = Bundle.main.url(forResource: "BuildDetails", withExtension: "plist").flatMap { NSDictionary(contentsOf: $0) }
         let entry = MealReviewAudit.Entry(kind: kind, session: reviewSession, capturedAt: Date(), evaluatedAt: now, payload: payload, sourceRevision: details?["com-LoopFollow-commit-sha"] as? String)
