@@ -17,6 +17,7 @@ struct MealReviewView: View {
     private let onUse: ((SmartMealDraft) -> Void)?
     @State private var customPercent = "75"
     @State private var carbText: String
+    @State private var refreshAnchor = Date()
     @State private var settingsPresented = false
     @State private var foodPresented = false
     @State private var foodMeal: CarnivalMeal?
@@ -46,7 +47,7 @@ struct MealReviewView: View {
 
     var body: some View {
         NavigationView {
-            TimelineView(.periodic(from: .now, by: 5)) { _ in
+            TimelineView(.periodic(from: refreshAnchor, by: 5)) { context in
                 // A retained/paused screen must not compare a new upload with
                 // its old timer value. Always evaluate against wall-clock time.
                 let now = Date()
@@ -111,7 +112,7 @@ struct MealReviewView: View {
                         Button("Hide keyboard") { carbsFocused = false }
                     }
                 }
-                .onChange(of: now) { _, _ in scheduleAudit() }
+                .onChange(of: context.date) { _, _ in scheduleAudit() }
             }
         }
         .sheet(isPresented: $settingsPresented) { MealReviewSettingsView(saved: settings, source: source) }

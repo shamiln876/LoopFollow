@@ -12,12 +12,13 @@ struct MealDashboardHomeCard: View {
     @ObservedObject private var newestTreatment = Observable.shared.mealReviewNewestTreatment
     @ObservedObject private var settings = Storage.shared.mealReviewSettings
     @ObservedObject private var source = Storage.shared.url
+    @State private var refreshAnchor = Date()
     @State private var presented = false
     @State private var mealPresented = false
     @State private var advisorDraft: SmartMealDraft?
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 5)) { _ in
+        TimelineView(.periodic(from: refreshAnchor, by: 5)) { _ in
             let now = Date()
             let status = MealDashboardStatus(snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, settings: settings.value, source: source.value, now: now)
             Button { advisorDraft = nil; presented = true } label: {
