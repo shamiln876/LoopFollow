@@ -64,6 +64,7 @@ struct MealView: View {
                 Form {
                     Section {
                         Button("Smart Meal Advisor") { showMealReview = true }
+                            .accessibilityIdentifier("meal-open-advisor")
                     }
                     if advisorUnresolved {
                         Section("Previous advisor send needs checking") {

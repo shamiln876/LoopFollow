@@ -14,7 +14,7 @@ struct MealReviewView: View {
     @State private var proteinText = ""
     @State private var fatText = ""
     @State private var sendFatProtein = false
-    private let onUse: ((SmartMealDraft) -> Void)?
+    private let onUse: (SmartMealDraft) -> Void
     @State private var customPercent = "75"
     @State private var carbText: String
     @State private var refreshAnchor = Date()
@@ -34,7 +34,7 @@ struct MealReviewView: View {
     @ObservedObject private var newestTreatment = Observable.shared.mealReviewNewestTreatment
     @ObservedObject private var trend = Storage.shared.lastTrendCode
 
-    init(initialCarbs: Double, settings: StorageValue<MealReviewSettings?> = Storage.shared.mealReviewSettings, source: StorageValue<String> = Storage.shared.url, audit: MealReviewAuditStore = .shared, onUse: ((SmartMealDraft) -> Void)? = nil) {
+    init(initialCarbs: Double, settings: StorageValue<MealReviewSettings?> = Storage.shared.mealReviewSettings, source: StorageValue<String> = Storage.shared.url, audit: MealReviewAuditStore = .shared, onUse: @escaping (SmartMealDraft) -> Void) {
         self.onUse = onUse
         self.initialCarbs = initialCarbs
         self.audit = audit
@@ -56,7 +56,7 @@ struct MealReviewView: View {
                         MealDashboardCompactOverview(status: MealDashboardStatus(snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, settings: settings.value, source: source.value, now: now), snapshot: snapshot.value, sensorArrow: trend.value, now: now, hasMeal: carbs.map { $0.isFinite && $0 > 0 } == true)
                     }
                     Section("Your meal") {
-                        Text("Enter carbs to review. Values update automatically. This screen cannot send carbs or insulin. A verified draft can prefill the standard Meal confirmation screen.")
+                        Text("Enter the full meal carbs. Review meal below copies your selected carbs and insulin to the editable Meal screen for confirmation.")
                         HStack {
                             Text("Meal carbs (g)")
                             TextField("Amount", text: $carbText)
@@ -102,6 +102,7 @@ struct MealReviewView: View {
                         if auditFailed { warning("Comparison history could not be saved. Keep a screenshot of this review.") }
                     }
                 }
+                .safeAreaInset(edge: .bottom) { transferBar(now: now) }
                 .scrollDismissesKeyboard(.interactively)
                 .navigationTitle("Smart Meal Advisor")
                 .navigationBarTitleDisplayMode(.inline)
@@ -181,8 +182,8 @@ struct MealReviewView: View {
     private func draft(full: Double) -> SmartMealDraft? {
         let current = Date()
         guard let plan = makePlan(full: full),
-              let protein = Double(proteinText.isEmpty ? "0" : proteinText),
-              let fat = Double(fatText.isEmpty ? "0" : fatText),
+              let protein = Double(sendFatProtein && !proteinText.isEmpty ? proteinText : "0"),
+              let fat = Double(sendFatProtein && !fatText.isEmpty ? fatText : "0"),
               plan.upfrontInsulin <= localBolusLimit.value.doubleValue(for: .internationalUnit()) else { return nil }
         return SmartMealDraft.make(plan: plan, protein: sendFatProtein ? protein : 0, fat: sendFatProtein ? fat : 0,
                                    settings: settings.value, snapshot: snapshot.value, source: source.value,
@@ -209,21 +210,74 @@ struct MealReviewView: View {
                 Group {
                     if selectedPercent != nil,
                        let plan = makePlan(full: full) {
-                        row(comparisonOnly ? "Upfront comparison" : "Selected upfront", units(plan.upfrontInsulin))
+                        if draft(full: full) != nil {
+                            Button { useRecommendation(full: full) } label: {
+                                row("Selected upfront · review meal", units(plan.upfrontInsulin))
+                            }
+                            .accessibilityIdentifier("advisor-selected-dose")
+                        } else {
+                            row(comparisonOnly ? "Upfront comparison" : "Selected upfront", units(plan.upfrontInsulin))
+                        }
                         row("Carbs now", "\(plan.immediateCarbs) g")
                         row("Carbs later", "\(plan.delayedCarbs) g at +\(delayText) min")
                         if plan.delayedCarbs > 0 { warning(RiceMealPlan.sendingBlocker) }
-                        if let onUse {
-                            Button("Prefill editable Meal screen") {
-                                guard let draft = draft(full: full) else { return }
-                                onUse(draft)
-                                dismiss()
-                            }.disabled(draft(full: full) == nil)
-                        }
                         row("Second insulin bolus", "None")
                         Text("Upfront percentage applies to the displayed comparison, which already includes the saved comparison percentage and limits.").font(.footnote)
                     } else { warning("Enter whole-gram carbs (1–1000), percentages from 0–100, and a positive delay for split carbs.") }
                 }
+    }
+
+    func useRecommendation(full: Double) {
+        // Revalidate at the tap, not just at the last display refresh.
+        guard let draft = draft(full: full) else { return }
+        carbsFocused = false
+        onUse(draft)
+        dismiss()
+    }
+
+    @ViewBuilder
+    private func transferBar(now: Date) -> some View {
+        let result = carbs.flatMap {
+            MealReviewFullCalculation.comparison(newCarbs: $0, settings: settings.value, snapshot: snapshot.value,
+                source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
+        }
+        let selected = result.flatMap { draft(full: $0.rounded) }
+        let needsSettings = settings.value.map {
+            $0.isHistorical || !$0.matches(source: source.value, version: snapshot.value?.trioVersion, now: now)
+                || !(0 ... 86400).contains(now.timeIntervalSince($0.checkedAt))
+        } ?? true
+        VStack(spacing: 6) {
+            if let selected, let result {
+                Button {
+                    useRecommendation(full: result.rounded)
+                } label: {
+                    Text("Review meal · \(selected.plan.immediateCarbs) g + \(units(selected.plan.upfrontInsulin))")
+                        .frame(maxWidth: .infinity)
+                }
+                .accessibilityIdentifier("advisor-review-meal")
+                Text("Opens editable Meal. Nothing is sent until you confirm.").font(.caption)
+            } else if needsSettings {
+                Text("Insulin transfer needs current Trio settings. Nightscout does not upload these four values.")
+                    .font(.caption).fixedSize(horizontal: false, vertical: true)
+                Button("Check Trio settings to enable transfer") {
+                    carbsFocused = false
+                    settingsPresented = true
+                }
+                .frame(maxWidth: .infinity)
+                .accessibilityIdentifier("advisor-check-settings")
+            } else {
+                Button("Review meal") {}.frame(maxWidth: .infinity).disabled(true)
+                Text(carbs.map { $0 > 0 } == true
+                    ? "Transfer held. See the calculation checks above and correct any invalid meal values."
+                    : "Enter meal carbs above to continue.")
+                    .font(.caption).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(.bar)
     }
 
     @ViewBuilder

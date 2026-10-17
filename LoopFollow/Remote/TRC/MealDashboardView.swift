@@ -14,24 +14,39 @@ struct MealDashboardHomeCard: View {
     @ObservedObject private var source = Storage.shared.url
     @State private var refreshAnchor = Date()
     @State private var presented = false
-    @State private var mealPresented = false
+    @State private var mealRoute: MealRoute?
+
+    private struct MealRoute: Identifiable {
+        let id = UUID()
+        let draft: SmartMealDraft?
+    }
     @State private var advisorDraft: SmartMealDraft?
 
     var body: some View {
         TimelineView(.periodic(from: refreshAnchor, by: 5)) { _ in
             let now = Date()
             let status = MealDashboardStatus(snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, settings: settings.value, source: source.value, now: now)
-            Button { advisorDraft = nil; presented = true } label: {
-                MealDashboardHomeLabel(status: status, snapshot: snapshot.value, now: now)
+            VStack(spacing: 4) {
+                Button { advisorDraft = nil; presented = true } label: {
+                    MealDashboardHomeLabel(status: status, snapshot: snapshot.value, now: now)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("home-meal-dashboard")
+                Button {
+                    advisorDraft = nil
+                    mealRoute = MealRoute(draft: nil)
+                } label: {
+                    Label("Enter meal", systemImage: "square.and.pencil")
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                }
+                .accessibilityIdentifier("home-enter-meal")
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("home-meal-dashboard")
             .sheet(isPresented: $presented, onDismiss: {
-                if advisorDraft != nil { mealPresented = true }
+                if let advisorDraft { mealRoute = MealRoute(draft: advisorDraft) }
             }) {
                 MealReviewView(initialCarbs: 0, onUse: { advisorDraft = $0 })
             }
-            .sheet(isPresented: $mealPresented) { MealView(initialAdvisorDraft: advisorDraft) }
+            .sheet(item: $mealRoute) { route in MealView(initialAdvisorDraft: route.draft) }
         }
     }
 }

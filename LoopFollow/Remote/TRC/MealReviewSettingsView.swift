@@ -13,7 +13,6 @@ struct MealReviewSettingsView: View {
     @State private var maxCOB = ""
     @State private var maxBolus = ""
     @State private var checked = false
-    @State private var historical = false
 
     init(saved: StorageValue<MealReviewSettings?> = Storage.shared.mealReviewSettings, source: StorageValue<String> = Storage.shared.url) {
         _saved = ObservedObject(wrappedValue: saved)
@@ -22,11 +21,11 @@ struct MealReviewSettingsView: View {
 
     private func number(_ text: String) -> Double? { Double(text.replacingOccurrences(of: ",", with: ".")) }
     private var proposed: MealReviewSettings? {
-        guard historical || checked, !source.value.isEmpty, snapshot.value?.trioVersion == "1.0.2",
+        guard !source.value.isEmpty, snapshot.value?.trioVersion == "1.0.2",
               let percentage = number(percentage), let iob = number(maxIOB), let cob = number(maxCOB), let bolus = number(maxBolus) else { return nil }
         let settings = MealReviewSettings(percentage: percentage, maxIOB: iob, maxCOB: cob, maxBolus: bolus,
                                           sourceFingerprint: MealReviewSettings.fingerprint(source.value), trioVersion: "1.0.2", checkedAt: Date(),
-                                          historicalReference: historical ? (saved.value?.historicalReference ?? "Historical values entered by user; not verified current in Trio.") : nil)
+                                          historicalReference: !checked ? (saved.value?.historicalReference ?? "Historical values entered by user; not verified current in Trio.") : nil)
         return settings.numbersValid ? settings : nil
     }
 
@@ -39,11 +38,9 @@ struct MealReviewSettingsView: View {
                     numberRow("Trio Max IOB (U)", $maxIOB)
                     numberRow("Trio Max COB (g)", $maxCOB)
                     numberRow("Trio Maximum Bolus (U)", $maxBolus)
-                    Toggle("Use historical values for comparison only", isOn: $historical)
-                    if historical {
-                        Text("These values are not confirmed current. The comparison remains for testing only.").foregroundStyle(.orange)
-                    } else {
-                        Toggle("I checked these current values in Trio, using Omnipod DASH", isOn: $checked)
+                    Toggle("I checked these values in current Trio on Omnipod DASH", isOn: $checked)
+                    if !checked {
+                        Text("Check the four values in Trio before enabling transfer. Nightscout uploads glucose, IOB and COB but does not upload these calculator settings. Saving without checking keeps comparison only.").foregroundStyle(.orange)
                     }
                 }
                 Section("Where to find them in Trio") {
@@ -52,7 +49,7 @@ struct MealReviewSettingsView: View {
                     if snapshot.value?.trioVersion != "1.0.2" { Text("Waiting for the supported Trio version's live upload.").foregroundStyle(.orange) }
                 }
                 Section {
-                    Button("Save comparison values") {
+                    Button(checked ? "Save verified settings" : "Save for comparison only") {
                         guard let proposed else { return }
                         saved.value = proposed
                         dismiss()
@@ -75,7 +72,6 @@ struct MealReviewSettingsView: View {
             maxIOB = String(s.maxIOB)
             maxCOB = String(s.maxCOB)
             maxBolus = String(s.maxBolus)
-            historical = s.isHistorical
         }
         .onChange(of: percentage) { _, _ in checked = false }
         .onChange(of: maxIOB) { _, _ in checked = false }
@@ -83,7 +79,6 @@ struct MealReviewSettingsView: View {
         .onChange(of: maxBolus) { _, _ in checked = false }
         .onChange(of: source.value) { _, _ in checked = false }
         .onChange(of: snapshot.value?.trioVersion) { _, _ in checked = false }
-        .onChange(of: historical) { _, _ in checked = false }
     }
 
     private func numberRow(_ label: String, _ binding: Binding<String>) -> some View {
