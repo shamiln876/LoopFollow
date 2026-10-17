@@ -44,5 +44,5 @@ Carnival nutritional autofill and actual bolus/SMB/peak/nadir outcome tracking a
 
 - Xcode 26.1.1: final iOS Simulator app and test bundle `build-for-testing` succeeded with signing disabled. An existing extension Info.plist resource warning remains.
 - Isolated macOS run of the exact core source: 32 tests passed across four suites.
-- Simulator execution/presentation tests stalled after compilation and were interrupted; no runtime UI pass is claimed.
-- No physical iPhone installation, actual authentication flow, remote treatment delivery, receiver batching or clinical efficacy test was performed.
+- A clean iOS 26.1 iPhone 17 Pro simulator subsequently passed both presentation tests (standard text and accessibility text), with zero failures. The earlier stalled simulator run was interrupted.
+- A separate physical-iPhone test build was attempted using a distinct bundle identifier. It is blocked by missing test-only App Group provisioning. Automatic approval review requires specific approval before registering `group.com.D3GG62L9X8.LoopFollowSmartMealTest`. Nothing was installed on the iPhone, and the existing LoopFollow installation was not replaced. No actual authentication flow, remote treatment delivery, receiver batching or clinical efficacy test was performed.
