@@ -9,6 +9,9 @@ import SwiftUI
 struct MealReviewView: View {
     let initialCarbs: Double
     @Environment(\.dismiss) private var dismiss
+    @State private var riceSelected = false
+    @State private var upfrontPercent = 100.0
+    @State private var customPercent = "100"
     @State private var carbText: String
     @State private var now = Date()
     @State private var settingsPresented = false
@@ -56,6 +59,7 @@ struct MealReviewView: View {
                     }
                     if carbsFocused { Button("Hide keyboard") { carbsFocused = false } }
                 }
+                riceSection
                 fullSection(now: now)
                 activitySection(now: now)
                 contextSection(now: now)
@@ -100,6 +104,37 @@ struct MealReviewView: View {
         }
     }
 
+    private var selectedPercent: Double? { Double(customPercent.replacingOccurrences(of: ",", with: ".")) }
+
+    @ViewBuilder
+    private var riceSection: some View {
+        Section("Carbohydrate announcement") {
+            Toggle("Rice · 75% now / 25% at +30 min", isOn: $riceSelected)
+            if riceSelected {
+                Text("Preview only · automatic sending unavailable").font(.headline).foregroundStyle(.orange)
+                if let carbs, carbs >= 4, carbs <= 1000, carbs.rounded() == carbs {
+                    let later = Int((carbs * 0.25).rounded())
+                    Text("Now: \(Int(carbs) - later) g · +30 minutes: \(later) g")
+                    Text("Whole-gram entries preserve the total. Small totals may differ from exactly 75/25. The delay would start at confirmation, not when this preview opens.").font(.footnote)
+                } else {
+                    warning("Rice requires whole-gram carbs from 4–1000 g for this preview; delivery limits still apply separately.")
+                }
+                Picker("Upfront insulin percentage", selection: $upfrontPercent) {
+                    ForEach([50.0, 60, 70, 75, 80, 90, 100], id: \.self) { value in
+                        Text(String(format: "%.0f%%", value)).tag(value)
+                    }
+                }
+                .onChange(of: upfrontPercent) { _, value in customPercent = String(format: "%.0f", value) }
+                HStack {
+                    Text("Custom upfront %")
+                    TextField("0–100", text: $customPercent).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                }
+                Text("No second insulin bolus. Unselected insulin is not owed; Trio would reassess subsequent needs.").font(.footnote)
+                warning(RiceMealPlan.sendingBlocker)
+            }
+        }
+    }
+
     private func scheduleAudit() {
         pendingAudit?.cancel()
         let work = DispatchWorkItem { recordAudit(kind: .comparisonDisplayed) }
@@ -137,6 +172,16 @@ struct MealReviewView: View {
                       let result = MealReviewFullCalculation.review(newCarbs: carbs, settings: settings.value, snapshot: snapshot.value, source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
             {
                 row("Trio-style comparison", units(result.rounded)).font(.title3.weight(.semibold))
+                if riceSelected {
+                    row("Full comparison before upfront selection", units(result.rounded))
+                    if let percent = selectedPercent,
+                       let plan = RiceMealPlan(carbs: carbs, fullRecommendation: result.rounded, upfrontPercent: percent, confirmedAt: now) {
+                        row("Selected upfront · preview only", units(plan.upfrontInsulin))
+                        row("Second insulin bolus", "None")
+                        Text("Upfront percentage applies to the displayed comparison, which already includes the saved comparison percentage and limits.").font(.footnote)
+                    } else { warning("Enter valid whole-gram carbs and an upfront percentage from 0–100.") }
+                }
+
                 Text("For comparison in Trio only. Not a validated dose to deliver.").font(.footnote.weight(.semibold))
                 if result.rounded > localBolusLimit.value.doubleValue(for: .internationalUnit()) {
                     warning("This exceeds LoopFollow's separate local bolus limit. No amount is transferred or sent.")
