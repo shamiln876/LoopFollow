@@ -9,9 +9,15 @@ import SwiftUI
 struct MealReviewView: View {
     let initialCarbs: Double
     @Environment(\.dismiss) private var dismiss
-    @State private var riceSelected = false
-    @State private var upfrontPercent = 100.0
-    @State private var customPercent = "100"
+    @State private var preset: SmartMealPreset = .rice
+    @State private var carbsNowText = "75"
+    @State private var delayText = "30"
+    @State private var proteinText = ""
+    @State private var fatText = ""
+    @State private var sendFatProtein = false
+    @State private var trioCheckedText = ""
+    private let onUse: ((SmartMealDraft) -> Void)?
+    @State private var customPercent = "75"
     @State private var carbText: String
     @State private var now = Date()
     @State private var settingsPresented = false
@@ -28,7 +34,8 @@ struct MealReviewView: View {
     @ObservedObject private var newestTreatment = Observable.shared.mealReviewNewestTreatment
     @ObservedObject private var trend = Storage.shared.lastTrendCode
 
-    init(initialCarbs: Double, settings: StorageValue<MealReviewSettings?> = Storage.shared.mealReviewSettings, source: StorageValue<String> = Storage.shared.url, audit: MealReviewAuditStore = .shared) {
+    init(initialCarbs: Double, settings: StorageValue<MealReviewSettings?> = Storage.shared.mealReviewSettings, source: StorageValue<String> = Storage.shared.url, audit: MealReviewAuditStore = .shared, onUse: ((SmartMealDraft) -> Void)? = nil) {
+        self.onUse = onUse
         self.initialCarbs = initialCarbs
         self.audit = audit
         _settings = ObservedObject(wrappedValue: settings)
@@ -48,7 +55,7 @@ struct MealReviewView: View {
         NavigationView {
             Form {
                 Section("Live meal review") {
-                    Text("Enter carbs to review. Values update automatically. This screen cannot send carbs or insulin.")
+                    Text("Enter carbs to review. Values update automatically. This screen cannot send carbs or insulin. A verified draft can prefill the standard Meal confirmation screen.")
                     HStack {
                         Text("Meal carbs (g)")
                         TextField("Amount", text: $carbText)
@@ -59,15 +66,15 @@ struct MealReviewView: View {
                     }
                     if carbsFocused { Button("Hide keyboard") { carbsFocused = false } }
                 }
-                riceSection
+                presetSection
                 fullSection(now: now)
                 activitySection(now: now)
                 contextSection(now: now)
                 forecastSection(now: now)
                 Section("Comparison limitations") {
-                    Text("The comparison applies your copied percentage and limits. Its intermediate arithmetic is under Calculation details. It has not been validated as a dose for your dad and cannot send or prefill insulin.")
+                    Text("The comparison applies your copied percentage and limits. Its intermediate arithmetic is under Calculation details. It has not been validated as a dose for your dad and cannot send insulin. Dose prefill requires a matching full recommendation checked in Trio.")
                     DisclosureGroup("What the model includes") {
-                        Text("New carbs and existing estimated COB are divided by Trio's active carb ratio. Glucose correction and recent glucose change use the reported effective ISF. Remaining net IOB is subtracted once. IOB and activity are relative to scheduled basal; negative values can represent a basal deficit. This review does not model absorption of the new meal, future SMBs, future ISF changes, or delivery that has not yet reached Nightscout. Uploaded predictions can be wrong. Entries here do not change the Meal or Bolus screens.")
+                        Text("New carbs and existing estimated COB are divided by Trio's active carb ratio. Glucose correction and recent glucose change use the reported effective ISF. Remaining net IOB is subtracted once. IOB and activity are relative to scheduled basal; negative values can represent a basal deficit. This review does not model absorption of the new meal, future SMBs, future ISF changes, or delivery that has not yet reached Nightscout. Uploaded predictions can be wrong. Use Prefill to transfer a local draft; confirmation and authentication occur on the Meal screen.")
                             .font(.footnote)
                     }
                 }
@@ -90,11 +97,11 @@ struct MealReviewView: View {
         .sheet(isPresented: $settingsPresented) { MealReviewSettingsView(saved: settings, source: source) }
         .onAppear { MealReviewSettingsImport.consumePending(); now = Date(); scheduleAudit() }
         .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { now = $0; scheduleAudit() }
-        .onChange(of: carbText) { _, _ in scheduleAudit() }
-        .onChange(of: snapshot.value) { _, _ in scheduleAudit() }
+        .onChange(of: carbText) { _, _ in trioCheckedText = ""; scheduleAudit() }
+        .onChange(of: snapshot.value) { _, _ in trioCheckedText = ""; scheduleAudit() }
         .onChange(of: history.value) { _, _ in scheduleAudit() }
-        .onChange(of: settings.value) { _, _ in scheduleAudit() }
-        .onChange(of: source.value) { _, _ in scheduleAudit() }
+        .onChange(of: settings.value) { _, _ in trioCheckedText = ""; scheduleAudit() }
+        .onChange(of: source.value) { _, _ in trioCheckedText = ""; scheduleAudit() }
         .onChange(of: newestTreatment.value) { _, _ in scheduleAudit() }
         .onChange(of: trend.value) { _, _ in scheduleAudit() }
         .onDisappear {
@@ -106,33 +113,53 @@ struct MealReviewView: View {
 
     private var selectedPercent: Double? { Double(customPercent.replacingOccurrences(of: ",", with: ".")) }
 
+    private func makePlan(full: Double) -> RiceMealPlan? {
+        guard let carbs, let percent = selectedPercent, let nowPercent = Double(carbsNowText), let delay = Double(delayText) else { return nil }
+        return RiceMealPlan(carbs: carbs, fullRecommendation: full, upfrontPercent: percent, confirmedAt: now, carbsNowPercent: nowPercent, delayMinutes: delay)
+    }
+
     @ViewBuilder
-    private var riceSection: some View {
-        Section("Carbohydrate announcement") {
-            Toggle("Rice · 75% now / 25% at +30 min", isOn: $riceSelected)
-            if riceSelected {
-                Text("Preview only · automatic sending unavailable").font(.headline).foregroundStyle(.orange)
-                if let carbs, carbs >= 4, carbs <= 1000, carbs.rounded() == carbs {
-                    let later = Int((carbs * 0.25).rounded())
-                    Text("Now: \(Int(carbs) - later) g · +30 minutes: \(later) g")
-                    Text("Whole-gram entries preserve the total. Small totals may differ from exactly 75/25. The delay would start at confirmation, not when this preview opens.").font(.footnote)
-                } else {
-                    warning("Rice requires whole-gram carbs from 4–1000 g for this preview; delivery limits still apply separately.")
-                }
-                Picker("Upfront insulin percentage", selection: $upfrontPercent) {
-                    ForEach([50.0, 60, 70, 75, 80, 90, 100], id: \.self) { value in
-                        Text(String(format: "%.0f%%", value)).tag(value)
-                    }
-                }
-                .onChange(of: upfrontPercent) { _, value in customPercent = String(format: "%.0f", value) }
-                HStack {
-                    Text("Custom upfront %")
-                    TextField("0–100", text: $customPercent).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                }
-                Text("No second insulin bolus. Unselected insulin is not owed; Trio would reassess subsequent needs.").font(.footnote)
-                warning(RiceMealPlan.sendingBlocker)
+    private var presetSection: some View {
+        Section("Meal preset · editable test defaults") {
+            Picker("Meal", selection: $preset) {
+                ForEach(SmartMealPreset.allCases) { Text($0.rawValue).tag($0) }
             }
+            .onChange(of: preset) { _, value in
+                carbsNowText = String(Int(value.carbsNowPercent))
+                delayText = String(Int(value.delayMinutes))
+                customPercent = String(Int(value.insulinPercent))
+                trioCheckedText = ""
+            }
+            HStack { Text("Carbs announced now (%)"); TextField("0–100", text: $carbsNowText).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
+            HStack { Text("Remaining carbs after (min)"); TextField("Minutes", text: $delayText).keyboardType(.numberPad).multilineTextAlignment(.trailing) }
+            HStack { Text("Upfront insulin (%)"); TextField("0–100", text: $customPercent).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
+            Text("Insulin percentage is independent of the carb split. It applies after Trio's existing recommendation percentage and limits. No later insulin bolus is scheduled.").font(.footnote)
+            HStack { Text("Protein (g), optional"); TextField("0", text: $proteinText).keyboardType(.numberPad) }
+            HStack { Text("Fat (g), optional"); TextField("0", text: $fatText).keyboardType(.numberPad) }
+            Toggle("Include protein/fat in Meal draft", isOn: $sendFatProtein)
+            if sendFatProtein { warning("Trio may convert these values to FPU equivalents. Check before confirming.") }
+            HStack { Text("Full recommendation checked in Trio (U)"); TextField("Required for dose prefill", text: $trioCheckedText).keyboardType(.decimalPad) }
+            Text("Compare using ALL meal carbs in Trio. Do not confirm or deliver that comparison in Trio. Historical settings cannot enable dose prefill.").font(.footnote)
         }
+    }
+
+    private func validNutrient(_ value: Double) -> Bool {
+        value.isFinite && value >= 0 && value <= 1000 && value.rounded() == value
+    }
+
+    private func draft(full: Double) -> SmartMealDraft? {
+        let current = Date()
+        guard let plan = makePlan(full: full), let settings = settings.value, let snapshot = snapshot.value,
+              let checked = Double(trioCheckedText.replacingOccurrences(of: ",", with: ".")), checked.isFinite,
+              abs(checked - full) < 0.000001,
+              let protein = Double(proteinText.isEmpty ? "0" : proteinText),
+              let fat = Double(fatText.isEmpty ? "0" : fatText),
+              validNutrient(protein), validNutrient(fat),
+              blockers(now: current).isEmpty,
+              plan.upfrontInsulin <= localBolusLimit.value.doubleValue(for: .internationalUnit()) else { return nil }
+        let draft = SmartMealDraft(plan: plan, protein: sendFatProtein ? protein : 0, fat: sendFatProtein ? fat : 0,
+                                   settings: settings, snapshot: snapshot, source: source.value, createdAt: current)
+        return draft.isCurrent(now: current, settings: settings, snapshot: snapshot, source: source.value) ? draft : nil
     }
 
     private func scheduleAudit() {
@@ -147,6 +174,29 @@ struct MealReviewView: View {
         let details = Bundle.main.url(forResource: "BuildDetails", withExtension: "plist").flatMap { NSDictionary(contentsOf: $0) }
         let entry = MealReviewAudit.Entry(kind: kind, session: reviewSession, capturedAt: Date(), evaluatedAt: now, payload: payload, sourceRevision: details?["com-LoopFollow-commit-sha"] as? String)
         audit.record(entry) { saved in DispatchQueue.main.async { auditFailed = !saved } }
+    }
+
+    @ViewBuilder
+    private func selectionSection(full: Double) -> some View {
+                Group {
+                    row("Full comparison before upfront selection", units(full))
+                    if selectedPercent != nil,
+                       let plan = makePlan(full: full) {
+                        row("Selected upfront", units(plan.upfrontInsulin))
+                        row("Carbs now", "\(plan.immediateCarbs) g")
+                        row("Carbs later", "\(plan.delayedCarbs) g at +\(delayText) min")
+                        if plan.delayedCarbs > 0 { warning(RiceMealPlan.sendingBlocker) }
+                        if let onUse {
+                            Button("Prefill editable Meal screen") {
+                                guard let draft = draft(full: full) else { return }
+                                onUse(draft)
+                                dismiss()
+                            }.disabled(draft(full: full) == nil)
+                        }
+                        row("Second insulin bolus", "None")
+                        Text("Upfront percentage applies to the displayed comparison, which already includes the saved comparison percentage and limits.").font(.footnote)
+                    } else { warning("Enter whole-gram carbs (1–1000), percentages from 0–100, and a positive delay for split carbs.") }
+                }
     }
 
     @ViewBuilder
@@ -172,19 +222,11 @@ struct MealReviewView: View {
                       let result = MealReviewFullCalculation.review(newCarbs: carbs, settings: settings.value, snapshot: snapshot.value, source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
             {
                 row("Trio-style comparison", units(result.rounded)).font(.title3.weight(.semibold))
-                if riceSelected {
-                    row("Full comparison before upfront selection", units(result.rounded))
-                    if let percent = selectedPercent,
-                       let plan = RiceMealPlan(carbs: carbs, fullRecommendation: result.rounded, upfrontPercent: percent, confirmedAt: now) {
-                        row("Selected upfront · preview only", units(plan.upfrontInsulin))
-                        row("Second insulin bolus", "None")
-                        Text("Upfront percentage applies to the displayed comparison, which already includes the saved comparison percentage and limits.").font(.footnote)
-                    } else { warning("Enter valid whole-gram carbs and an upfront percentage from 0–100.") }
-                }
+                selectionSection(full: result.rounded)
 
-                Text("For comparison in Trio only. Not a validated dose to deliver.").font(.footnote.weight(.semibold))
+                Text("Review the full recommendation in Trio before prefilling a dose.").font(.footnote.weight(.semibold))
                 if result.rounded > localBolusLimit.value.doubleValue(for: .internationalUnit()) {
-                    warning("This exceeds LoopFollow's separate local bolus limit. No amount is transferred or sent.")
+                    warning("The full comparison exceeds LoopFollow's local bolus limit. The selected upfront amount must fit that limit before prefill.")
                 }
                 DisclosureGroup("Calculation details") {
                     row("Carbs after Max COB", String(format: "%.1f g", result.cappedCarbs))

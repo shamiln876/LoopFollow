@@ -8,6 +8,10 @@ import SwiftUI
 struct MealView: View {
     @Environment(\.presentationMode) private var presentationMode
     @State private var showMealReview = false
+    @State private var advisorDraft: SmartMealDraft?
+    @State private var advisorAttempted = false
+    @State private var isAuthenticating = false
+    @State private var advisorUnresolved = SmartMealSendJournal.shared.hasPending(source: Storage.shared.url.value)
     @State private var carbs = HKQuantity(unit: .gram(), doubleValue: 0.0)
     @State private var protein = HKQuantity(unit: .gram(), doubleValue: 0.0)
     @State private var fat = HKQuantity(unit: .gram(), doubleValue: 0.0)
@@ -49,7 +53,31 @@ struct MealView: View {
             VStack {
                 Form {
                     Section {
-                        Button("Smart Meal Advisor · Read-only") { showMealReview = true }
+                        Button("Smart Meal Advisor") { showMealReview = true }
+                    }
+                    if advisorUnresolved {
+                        Section("Previous advisor send needs checking") {
+                            Text("Check Trio and Nightscout for the actual meal and insulin before another advisor send. APNs acceptance does not confirm delivery.")
+                            Button("I checked Trio/Nightscout · allow a new review") {
+                                if SmartMealSendJournal.shared.reconcile(source: Storage.shared.url.value) {
+                                    advisorUnresolved = false
+                                }
+                            }
+                        }
+                    }
+                    if let draft = advisorDraft {
+                        Section("Smart Meal Advisor draft") {
+                            Text("Carbs now: \(draft.plan.immediateCarbs) g · later: \(draft.plan.delayedCarbs) g. Selected insulin: \(InsulinFormatter.shared.string(draft.plan.upfrontInsulin)) U")
+                            if draft.plan.delayedCarbs > 0 { Text(RiceMealPlan.sendingBlocker).foregroundStyle(.orange) }
+                            Text("Draft expires after two minutes or a new Trio snapshot. Review again if held.").font(.footnote)
+                            Button("Discard advisor draft") {
+                                advisorDraft = nil
+                                carbs = HKQuantity(unit: .gram(), doubleValue: 0)
+                                protein = HKQuantity(unit: .gram(), doubleValue: 0)
+                                fat = HKQuantity(unit: .gram(), doubleValue: 0)
+                                bolusAmount = HKQuantity(unit: .internationalUnit(), doubleValue: 0)
+                            }
+                        }
                     }
                     if !quickPickMeals.quickPickMeals.isEmpty {
                         Section(header: QuickPickSectionHeader(title: "Quick-Pick Meals", infoText: QuickPickSectionHeader.mealInfoText)) {
@@ -117,7 +145,7 @@ struct MealView: View {
                             }
                         )
 
-                        if mealWithFatProtein.value {
+                        if mealWithFatProtein.value || advisorDraft != nil {
                             HKQuantityInputView(
                                 label: "Fat",
                                 quantity: $fat,
@@ -145,7 +173,7 @@ struct MealView: View {
                             )
                         }
 
-                        if mealWithBolus.value {
+                        if mealWithBolus.value || advisorDraft != nil {
                             HKQuantityInputView(
                                 label: "Bolus Amount",
                                 quantity: $bolusAmount,
@@ -162,7 +190,7 @@ struct MealView: View {
                     }
 
                     Section(header: Text("Schedule")) {
-                        Toggle("Schedule for later", isOn: $isScheduling)
+                        Toggle("Schedule for later", isOn: $isScheduling).disabled(advisorDraft != nil)
                         if isScheduling {
                             DatePicker(
                                 "Select Time",
@@ -180,6 +208,7 @@ struct MealView: View {
                         }
                     }
                 }
+                .disabled(isLoading || isAuthenticating)
                 .safeAreaInset(edge: .bottom) {
                     Button {
                         carbsFieldIsFocused = false
@@ -222,7 +251,16 @@ struct MealView: View {
                 .navigationBarTitleDisplayMode(.inline)
             }
             .sheet(isPresented: $showMealReview) {
-                MealReviewView(initialCarbs: carbs.doubleValue(for: .gram()))
+                MealReviewView(initialCarbs: advisorDraft.map { Double($0.plan.immediateCarbs + $0.plan.delayedCarbs) } ?? carbs.doubleValue(for: .gram()), onUse: { draft in
+                    advisorDraft = draft
+                    advisorAttempted = false
+                    carbs = HKQuantity(unit: .gram(), doubleValue: Double(draft.plan.immediateCarbs))
+                    protein = HKQuantity(unit: .gram(), doubleValue: draft.protein)
+                    fat = HKQuantity(unit: .gram(), doubleValue: draft.fat)
+                    bolusAmount = HKQuantity(unit: .internationalUnit(), doubleValue: draft.plan.upfrontInsulin)
+                    isScheduling = false
+                    selectedTime = nil
+                })
             }
             .onAppear {
                 selectedTime = nil
@@ -278,8 +316,10 @@ struct MealView: View {
                         primaryButton: .default(Text("Confirm"), action: {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                 if bolusAmount > 0 {
+                                    isAuthenticating = true
                                     AuthService.authenticate(reason: "Confirm your identity to send bolus.") { result in
                                         DispatchQueue.main.async {
+                                            isAuthenticating = false
                                             switch result {
                                             case .success:
                                                 self.sendMealCommand()
@@ -332,10 +372,44 @@ struct MealView: View {
     }
 
     private var isButtonDisabled: Bool {
-        return isLoading
+        return isLoading || isAuthenticating || (advisorDraft?.plan.delayedCarbs ?? 0) > 0 || advisorAttempted || (advisorDraft != nil && advisorUnresolved)
     }
 
     private func sendMealCommand() {
+        guard !isLoading else { return }
+        if let draft = advisorDraft {
+            let current = Date()
+            guard !advisorAttempted, draft.plan.delayedCarbs == 0, !isScheduling,
+                  draft.isCurrent(now: current, settings: Storage.shared.mealReviewSettings.value,
+                                  snapshot: Observable.shared.mealReview.value, source: Storage.shared.url.value),
+                  MealReviewCalculation.reasons(snapshot: Observable.shared.mealReview.value,
+                    samples: Observable.shared.mealReviewGlucose.value,
+                    newestTreatment: Observable.shared.mealReviewNewestTreatment.value, now: current).isEmpty,
+                  carbs.doubleValue(for: .gram()) == Double(draft.plan.immediateCarbs),
+                  bolusAmount.doubleValue(for: .internationalUnit()) <= maxBolus.value.doubleValue(for: .internationalUnit()),
+                  bolusAmount.doubleValue(for: .internationalUnit()) >= 0,
+                  (0 ... 600).contains(where: { Double($0) / 20 == bolusAmount.doubleValue(for: .internationalUnit()) }),
+                  protein.doubleValue(for: .gram()) >= 0,
+                  fat.doubleValue(for: .gram()) >= 0,
+                  protein.doubleValue(for: .gram()) <= maxProtein.value.doubleValue(for: .gram()),
+                  fat.doubleValue(for: .gram()) <= maxFat.value.doubleValue(for: .gram()),
+                  carbs.doubleValue(for: .gram()) <= maxCarbs.value.doubleValue(for: .gram()) else {
+                alertMessage = "Advisor draft held. Split meals are unavailable; changed carbs, stale data or settings require a fresh review. Nothing sent."
+                alertType = .validationError
+                showAlert = true
+                return
+            }
+            // A failed transport may already have reached Trio. Never automatically retry a draft.
+            guard SmartMealSendJournal.shared.claim(source: draft.source) else {
+                advisorUnresolved = true
+                alertMessage = "Advisor send held: an earlier attempt needs checking, or its pending record could not be saved. Nothing sent."
+                alertType = .validationError
+                showAlert = true
+                return
+            }
+            advisorUnresolved = true
+            advisorAttempted = true
+        }
         isLoading = true
 
         var scheduledDate: Date? = nil
@@ -383,7 +457,7 @@ struct MealView: View {
                     isScheduling = false
                     alertType = .statusSuccess
                 } else {
-                    statusMessage = errorMessage ?? "Failed to send meal command."
+                    statusMessage = (errorMessage ?? "Failed to send meal command.") + (advisorDraft != nil ? " Delivery is uncertain. Check Trio and Nightscout before creating another draft; do not retry blindly." : "")
                     LogManager.shared.log(
                         category: .apns,
                         message: "sendMealPushNotification failed with error: \(errorMessage ?? "unknown error")"
