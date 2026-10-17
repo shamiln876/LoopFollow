@@ -130,17 +130,17 @@ struct MealReviewFullCalculationTests {
         s.pumpDate = now
         let readings: [MealReviewCalculation.GlucoseSample] = [.init(date: now.addingTimeInterval(-900), mgdl: 175), .init(date: now, mgdl: 180)]
         #expect(MealReviewFullCalculation.comparison(newCarbs: 80, settings: settings(), snapshot: s, source: source,
-            samples: readings, newestTreatment: nil, now: now)?.rounded == 8.9)
+                                                     samples: readings, newestTreatment: nil, now: now)?.rounded == 8.9)
         #expect(MealReviewFullCalculation.review(newCarbs: 80, settings: settings(), snapshot: s, source: source,
-            samples: readings, newestTreatment: nil, now: now) == nil)
+                                                 samples: readings, newestTreatment: nil, now: now) == nil)
         #expect(MealReviewFullCalculation.comparison(newCarbs: 80, settings: settings(), snapshot: s, source: source,
-            samples: readings, newestTreatment: nil, now: now.addingTimeInterval(601)) == nil)
+                                                     samples: readings, newestTreatment: nil, now: now.addingTimeInterval(601)) == nil)
         #expect(MealReviewFullCalculation.comparison(newCarbs: 80, settings: settings(), snapshot: s, source: source,
-            samples: readings, newestTreatment: now.addingTimeInterval(6), now: now) == nil)
+                                                     samples: readings, newestTreatment: now.addingTimeInterval(6), now: now) == nil)
         #expect(MealReviewFullCalculation.comparison(newCarbs: 80, settings: nil, snapshot: s, source: source,
-            samples: readings, newestTreatment: nil, now: now) == nil)
+                                                     samples: readings, newestTreatment: nil, now: now) == nil)
         s.effectiveISF = nil
         #expect(MealReviewFullCalculation.comparison(newCarbs: 80, settings: settings(), snapshot: s, source: source,
-            samples: readings, newestTreatment: nil, now: now) == nil)
+                                                     samples: readings, newestTreatment: nil, now: now) == nil)
     }
 }

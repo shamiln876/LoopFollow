@@ -20,6 +20,7 @@ struct MealDashboardHomeCard: View {
         let id = UUID()
         let draft: SmartMealDraft?
     }
+
     @State private var advisorDraft: SmartMealDraft?
 
     var body: some View {

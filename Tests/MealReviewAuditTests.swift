@@ -54,8 +54,8 @@ struct MealReviewAuditTests {
         // JSON millisecond dates can acquire sub-microsecond floating-point drift.
         #expect(abs(savedSettings.checkedAt.timeIntervalSince(expectedSettings.checkedAt)) < 0.001)
         let comparableSettings = MealReviewSettings(percentage: savedSettings.percentage, maxIOB: savedSettings.maxIOB,
-            maxCOB: savedSettings.maxCOB, maxBolus: savedSettings.maxBolus, sourceFingerprint: savedSettings.sourceFingerprint,
-            trioVersion: savedSettings.trioVersion, checkedAt: expectedSettings.checkedAt, historicalReference: savedSettings.historicalReference)
+                                                    maxCOB: savedSettings.maxCOB, maxBolus: savedSettings.maxBolus, sourceFingerprint: savedSettings.sourceFingerprint,
+                                                    trioVersion: savedSettings.trioVersion, checkedAt: expectedSettings.checkedAt, historicalReference: savedSettings.historicalReference)
         #expect(comparableSettings == expectedSettings)
         #expect(abs(restored.evaluatedAt.timeIntervalSince(now)) < 0.001)
     }

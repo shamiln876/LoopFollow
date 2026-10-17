@@ -74,9 +74,9 @@ final class MealReviewPresentationTests: XCTestCase {
         snapshot.uploadUnitSource = "Trio mg/dL fields"
         if withReceiver {
             let config = SmartMealConfiguration(percentage: 80, maxIOB: 15, maxCOB: 120, maxBolus: 10,
-                maxCarbs: 150, maxFat: 100, maxProtein: 100, bolusIncrement: 0.05)
+                                                maxCarbs: 150, maxFat: 100, maxProtein: 100, bolusIncrement: 0.05)
             snapshot.smartMeal = SmartMealReceiverStatus(protocolVersion: 1, generatedAt: now.timeIntervalSince1970,
-                calculationAt: now.timeIntervalSince1970, bundleIdentifier: "test.trio", enabled: true, configuration: config, receipts: [])
+                                                         calculationAt: now.timeIntervalSince1970, bundleIdentifier: "test.trio", enabled: true, configuration: config, receipts: [])
         }
         Observable.shared.mealReview.value = snapshot
         Observable.shared.mealReviewGlucose.value = [.init(date: now.addingTimeInterval(-900), mgdl: 175), .init(date: now, mgdl: 180)]
@@ -105,9 +105,9 @@ final class MealReviewPresentationTests: XCTestCase {
         if withDraft {
             Storage.shared.maxBolus.value = HKQuantity(unit: .internationalUnit(), doubleValue: 10)
             let plan = try XCTUnwrap(RiceMealPlan(carbs: 80, fullRecommendation: 5.8, upfrontPercent: 75,
-                confirmedAt: now, carbsNowPercent: 100, delayMinutes: 0))
-            let draft = SmartMealDraft(plan: plan, protein: 0, fat: 0, settings: try XCTUnwrap(settings.value),
-                snapshot: snapshot, source: testSource, createdAt: now)
+                                                  confirmedAt: now, carbsNowPercent: 100, delayMinutes: 0))
+            let draft = try SmartMealDraft(plan: plan, protein: 0, fat: 0, settings: XCTUnwrap(settings.value),
+                                           snapshot: snapshot, source: testSource, createdAt: now)
             root = AnyView(MealView(initialAdvisorDraft: draft).environment(\.sizeCategory, sizeCategory))
         } else {
             let advisor = MealReviewView(initialCarbs: 80, initialBolus: manualBolus, settings: settings, source: source, audit: audit, onUse: { transferred = $0 })

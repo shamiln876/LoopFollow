@@ -109,17 +109,17 @@ struct CarnivalFoodTests {
         legacy.removeValue(forKey: "foodMeal")
         #expect(try decoder.decode(MealReviewAudit.Payload.self, from: JSONSerialization.data(withJSONObject: legacy)).foodMeal == nil)
     }
+
     @Test func roundedRemoteEntryRetainsFoodProvenanceWithoutSendingMacros() throws {
         let bagel = try #require(guide().foods.first { $0.id == "MG8D7CE49" })
         let chosen = try meal(bagel, portions: 0.3)
         let total = try #require(chosen.carbsForReview)
         let now = Date()
         let linked = MealReviewAudit.Payload.capture(carbs: total.rounded(), source: "https://example.invalid", settings: nil,
-            snapshot: nil, glucose: [], newestTreatment: nil, sensorArrow: nil, now: now, foodMeal: chosen)
+                                                     snapshot: nil, glucose: [], newestTreatment: nil, sensorArrow: nil, now: now, foodMeal: chosen)
         #expect(linked?.foodMeal == chosen)
         let changed = MealReviewAudit.Payload.capture(carbs: total.rounded() + 1, source: "https://example.invalid", settings: nil,
-            snapshot: nil, glucose: [], newestTreatment: nil, sensorArrow: nil, now: now, foodMeal: chosen)
+                                                      snapshot: nil, glucose: [], newestTreatment: nil, sensorArrow: nil, now: now, foodMeal: chosen)
         #expect(changed?.foodMeal == nil)
     }
-
 }

@@ -1,3 +1,6 @@
+// LoopFollow
+// SmartMealDelivery.swift
+
 import Foundation
 
 /// Current configuration comes from the paired Trio's live upload, not defaults/history.
@@ -7,9 +10,9 @@ enum SmartMealDelivery {
               status.isCurrent(now: now, calculationDate: snapshot.date, bundleID: bundleID), snapshot.trioVersion == "1.0.2" else { return nil }
         let c = status.configuration
         var result = MealReviewSettings(percentage: NSDecimalNumber(decimal: c.percentage).doubleValue,
-            maxIOB: NSDecimalNumber(decimal: c.maxIOB).doubleValue, maxCOB: NSDecimalNumber(decimal: c.maxCOB).doubleValue,
-            maxBolus: NSDecimalNumber(decimal: c.maxBolus).doubleValue, sourceFingerprint: MealReviewSettings.fingerprint(source),
-            trioVersion: "1.0.2", checkedAt: Date(timeIntervalSince1970: status.generatedAt))
+                                        maxIOB: NSDecimalNumber(decimal: c.maxIOB).doubleValue, maxCOB: NSDecimalNumber(decimal: c.maxCOB).doubleValue,
+                                        maxBolus: NSDecimalNumber(decimal: c.maxBolus).doubleValue, sourceFingerprint: MealReviewSettings.fingerprint(source),
+                                        trioVersion: "1.0.2", checkedAt: Date(timeIntervalSince1970: status.generatedAt))
         result.receiverConfigurationID = c.identifier
         return result.numbersValid ? result : nil
     }
@@ -33,11 +36,11 @@ enum SmartMealDelivery {
               let percent = Decimal(string: String(draft.plan.upfrontPercent)),
               let amount = Decimal(string: String(bolus)) else { return nil }
         let request = SmartMealRequest(id: draft.transactionID, confirmedAt: now.timeIntervalSince1970,
-            calculationAt: status.calculationAt, configurationID: status.configuration.identifier,
-            immediateCarbs: draft.plan.immediateCarbs, delayedCarbs: draft.plan.delayedCarbs,
-            delaySeconds: draft.plan.delayedCarbs > 0 ? Int((draft.plan.delayMinutes * 60).rounded()) : 0,
-            fullRecommendation: full, upfrontPercent: percent, bolusAmount: amount,
-            includeFatProtein: protein > 0 || fat > 0, protein: Int(protein), fat: Int(fat))
+                                       calculationAt: status.calculationAt, configurationID: status.configuration.identifier,
+                                       immediateCarbs: draft.plan.immediateCarbs, delayedCarbs: draft.plan.delayedCarbs,
+                                       delaySeconds: draft.plan.delayedCarbs > 0 ? Int((draft.plan.delayMinutes * 60).rounded()) : 0,
+                                       fullRecommendation: full, upfrontPercent: percent, bolusAmount: amount,
+                                       includeFatProtein: protein > 0 || fat > 0, protein: Int(protein), fat: Int(fat))
         return (try? request.validate(configuration: status.configuration, now: now)) != nil ? request : nil
     }
 }

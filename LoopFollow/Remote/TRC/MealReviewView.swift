@@ -192,10 +192,10 @@ struct MealReviewView: View {
                 bolusOverrideText = nil
             }
             DisclosureGroup("Change carb split or insulin percentage") {
-            HStack { Text("Carbs announced now (%)"); TextField("0–100", text: $carbsNowText).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
-            HStack { Text("Remaining carbs after (min)"); TextField("Minutes", text: $delayText).keyboardType(.numberPad).multilineTextAlignment(.trailing) }
-            HStack { Text("Upfront insulin (%)"); TextField("0–100", text: $customPercent).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
-            Text("Carb split and insulin percentage are separate. No later insulin bolus is scheduled.").font(.footnote)
+                HStack { Text("Carbs announced now (%)"); TextField("0–100", text: $carbsNowText).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
+                HStack { Text("Remaining carbs after (min)"); TextField("Minutes", text: $delayText).keyboardType(.numberPad).multilineTextAlignment(.trailing) }
+                HStack { Text("Upfront insulin (%)"); TextField("0–100", text: $customPercent).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
+                Text("Carb split and insulin percentage are separate. No later insulin bolus is scheduled.").font(.footnote)
             }
         }
     }
@@ -238,43 +238,44 @@ struct MealReviewView: View {
 
     @ViewBuilder
     private func selectionSection(full: Double, comparisonOnly: Bool) -> some View {
-                Group {
-                    if let carbs, let percent = selectedPercent,
-                       let nowPercent = Double(carbsNowText), let delay = Double(delayText),
-                       let suggestion = RiceMealPlan(carbs: carbs, fullRecommendation: full, upfrontPercent: percent, confirmedAt: Date(), carbsNowPercent: nowPercent, delayMinutes: delay, preset: preset) {
-                        let plan = makePlan(full: full) ?? suggestion
-                        row(comparisonOnly ? "Suggested comparison" : "Suggested upfront (\(customPercent)%)", units(suggestion.suggestedUpfrontInsulin))
-                        HStack {
-                            Text("Your upfront bolus (U)")
-                            TextField("Units", text: Binding(get: {
-                                bolusOverrideText ?? String(format: "%.2f", suggestion.upfrontInsulin)
-                            }, set: { bolusOverrideText = $0 }))
-                            .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                            .focused($bolusFocused)
-                            .accessibilityLabel("Your upfront bolus in units")
-                            .accessibilityIdentifier("advisor-edit-bolus")
-                        }
-                        if bolusOverrideText != nil {
-                            Button("Use suggested insulin") { bolusOverrideText = nil; bolusFocused = false }
-                            Text("Your edited units are copied as entered; the insulin percentage is not applied again.").font(.caption)
-                        }
-                        if makePlan(full: full) == nil {
-                            warning("Enter a valid insulin amount in 0.05 U steps.")
-                        }
-                        if let actual = makePlan(full: full), let settings = settings.value, let iob = snapshot.value?.iob {
-                            let limit = min(localBolusLimit.value.doubleValue(for: .internationalUnit()), settings.maxBolus, max(0, settings.maxIOB - iob))
-                            if actual.upfrontInsulin > limit { warning("This amount exceeds the current limit of \(units(limit)).") }
-                        }
-                        let maximumCarbs = min(localCarbLimit.value.doubleValue(for: .gram()), snapshot.value?.smartMeal.map { NSDecimalNumber(decimal: $0.configuration.maxCarbs).doubleValue } ?? 1000)
-                        if carbs > maximumCarbs { warning("The current meal-carb limit is \(Int(maximumCarbs)) g.") }
-                        row("Carbs now", "\(plan.immediateCarbs) g")
-                        row("Carbs later", plan.delayedCarbs > 0 ? "\(plan.delayedCarbs) g at +\(delayText) min" : "None")
-                        if plan.delayedCarbs > 0 && !SmartMealDelivery.available(snapshot: snapshot.value, settings: settings.value, bundleID: Storage.shared.bundleId.value, now: Date()) {
-                            warning(RiceMealPlan.sendingBlocker)
-                        }
-                        Text("No later insulin bolus. Use these values copies your choice into Meal for final confirmation.").font(.caption)
-                    } else { warning("Enter whole-gram carbs (1–1000), percentages from 0–100, and a positive delay for split carbs.") }
+        Group {
+            if let carbs, let percent = selectedPercent,
+               let nowPercent = Double(carbsNowText), let delay = Double(delayText),
+               let suggestion = RiceMealPlan(carbs: carbs, fullRecommendation: full, upfrontPercent: percent, confirmedAt: Date(), carbsNowPercent: nowPercent, delayMinutes: delay, preset: preset)
+            {
+                let plan = makePlan(full: full) ?? suggestion
+                row(comparisonOnly ? "Suggested comparison" : "Suggested upfront (\(customPercent)%)", units(suggestion.suggestedUpfrontInsulin))
+                HStack {
+                    Text("Your upfront bolus (U)")
+                    TextField("Units", text: Binding(get: {
+                        bolusOverrideText ?? String(format: "%.2f", suggestion.upfrontInsulin)
+                    }, set: { bolusOverrideText = $0 }))
+                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                        .focused($bolusFocused)
+                        .accessibilityLabel("Your upfront bolus in units")
+                        .accessibilityIdentifier("advisor-edit-bolus")
                 }
+                if bolusOverrideText != nil {
+                    Button("Use suggested insulin") { bolusOverrideText = nil; bolusFocused = false }
+                    Text("Your edited units are copied as entered; the insulin percentage is not applied again.").font(.caption)
+                }
+                if makePlan(full: full) == nil {
+                    warning("Enter a valid insulin amount in 0.05 U steps.")
+                }
+                if let actual = makePlan(full: full), let settings = settings.value, let iob = snapshot.value?.iob {
+                    let limit = min(localBolusLimit.value.doubleValue(for: .internationalUnit()), settings.maxBolus, max(0, settings.maxIOB - iob))
+                    if actual.upfrontInsulin > limit { warning("This amount exceeds the current limit of \(units(limit)).") }
+                }
+                let maximumCarbs = min(localCarbLimit.value.doubleValue(for: .gram()), snapshot.value?.smartMeal.map { NSDecimalNumber(decimal: $0.configuration.maxCarbs).doubleValue } ?? 1000)
+                if carbs > maximumCarbs { warning("The current meal-carb limit is \(Int(maximumCarbs)) g.") }
+                row("Carbs now", "\(plan.immediateCarbs) g")
+                row("Carbs later", plan.delayedCarbs > 0 ? "\(plan.delayedCarbs) g at +\(delayText) min" : "None")
+                if plan.delayedCarbs > 0 && !SmartMealDelivery.available(snapshot: snapshot.value, settings: settings.value, bundleID: Storage.shared.bundleId.value, now: Date()) {
+                    warning(RiceMealPlan.sendingBlocker)
+                }
+                Text("No later insulin bolus. Use these values copies your choice into Meal for final confirmation.").font(.caption)
+            } else { warning("Enter whole-gram carbs (1–1000), percentages from 0–100, and a positive delay for split carbs.") }
+        }
     }
 
     func useRecommendation(full: Double) {
@@ -290,7 +291,7 @@ struct MealReviewView: View {
     private func transferBar(now: Date) -> some View {
         let result = carbs.flatMap {
             MealReviewFullCalculation.comparison(newCarbs: $0, settings: settings.value, snapshot: snapshot.value,
-                source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
+                                                 source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
         }
         let selected = result.flatMap { draft(full: $0.rounded) }
         let needsSettings = settings.value.map {

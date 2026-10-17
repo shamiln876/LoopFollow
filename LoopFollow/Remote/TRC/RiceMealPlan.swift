@@ -1,3 +1,6 @@
+// LoopFollow
+// RiceMealPlan.swift
+
 import Foundation
 
 /// Preview only. This type has no transport, credentials, timers, or delivery side effects.
@@ -32,7 +35,7 @@ struct RiceMealPlan: Equatable {
               upfrontPercent.isFinite, (0 ... 100).contains(upfrontPercent),
               carbsNowPercent.isFinite, (0 ... 100).contains(carbsNowPercent),
               delayMinutes.isFinite, (0 ... 1440).contains(delayMinutes),
-              (carbsNowPercent == 100 || delayMinutes > 0),
+              carbsNowPercent == 100 || delayMinutes > 0,
               confirmedAt.timeIntervalSince1970.isFinite else { return nil }
         let total = Int(carbs)
         delayedCarbs = Int((carbs * (100 - carbsNowPercent) / 100).rounded())
@@ -87,7 +90,8 @@ struct SmartMealDraft {
         if let identifier = settings?.receiverConfigurationID {
             guard let status = snapshot?.smartMeal,
                   status.isCurrent(now: now, calculationDate: snapshot?.date, bundleID: status.bundleIdentifier),
-                  status.configuration.identifier == identifier else {
+                  status.configuration.identifier == identifier
+            else {
                 return reasons + ["Waiting for current Trio calculator settings and smart-meal capability."]
             }
         }
@@ -111,7 +115,7 @@ struct SmartMealDraft {
         if settings.receiverConfigurationID != nil {
             guard let status = snapshot.smartMeal,
                   SmartMealDelivery.request(draft: draft, bolus: plan.upfrontInsulin, protein: protein, fat: fat,
-                    snapshot: snapshot, settings: settings, bundleID: status.bundleIdentifier, now: now) != nil else { return nil }
+                                            snapshot: snapshot, settings: settings, bundleID: status.bundleIdentifier, now: now) != nil else { return nil }
         }
         return draft.isCurrent(now: now, settings: settings, snapshot: snapshot, source: source) ? draft : nil
     }
@@ -137,6 +141,7 @@ final class SmartMealSendJournal {
         lock.lock(); defer { lock.unlock() }
         return FileManager.default.fileExists(atPath: file(source: source).path)
     }
+
     func claim(source: String) -> Bool {
         lock.lock(); defer { lock.unlock() }
         guard !FileManager.default.fileExists(atPath: file(source: source).path) else { return false }
@@ -150,6 +155,7 @@ final class SmartMealSendJournal {
             return true
         } catch { return false } // Failure to persist prevents sending.
     }
+
     func claim(request: SmartMealRequest, source: String) -> Bool {
         lock.lock(); defer { lock.unlock() }
         guard !FileManager.default.fileExists(atPath: file(source: source).path) else { return false }
@@ -159,14 +165,17 @@ final class SmartMealSendJournal {
             return true
         } catch { return false }
     }
+
     func pendingRequest(source: String) -> SmartMealRequest? {
         lock.lock(); defer { lock.unlock() }
         return try? JSONDecoder().decode(SmartMealRequest.self, from: Data(contentsOf: file(source: source)))
     }
+
     func lastReceipt(source: String) -> SmartMealReceipt? {
         lock.lock(); defer { lock.unlock() }
         return try? JSONDecoder().decode(SmartMealReceipt.self, from: Data(contentsOf: file(source: source).appendingPathExtension("receipt.json")))
     }
+
     @discardableResult
     func receive(_ status: SmartMealReceiverStatus, source: String, bundleID: String, now: Date) -> SmartMealReceipt? {
         lock.lock(); defer { lock.unlock() }
@@ -183,6 +192,7 @@ final class SmartMealSendJournal {
             return receipt
         } catch { return nil }
     }
+
     func reconcile(source: String, now: Date = Date()) -> Bool {
         lock.lock(); defer { lock.unlock() }
         // A caregiver can clear an expired, checked sender attempt, but never cancel

@@ -1,3 +1,6 @@
+// LoopFollow
+// SmartMealHandoffUITests.swift
+
 import XCTest
 
 final class SmartMealHandoffUITests: XCTestCase {
@@ -69,7 +72,9 @@ final class SmartMealHandoffUITests: XCTestCase {
         XCTAssertTrue(carbs.waitForExistence(timeout: 10)); carbs.tap(); carbs.typeText("80")
         hideKeyboard(app)
         let dose = app.textFields["advisor-edit-bolus"]
-        for _ in 0 ..< 4 where !dose.isHittable { app.swipeUp() }
+        for _ in 0 ..< 4 where !dose.isHittable {
+            app.swipeUp()
+        }
         XCTAssertTrue(dose.isHittable)
         dose.tap()
         let previous = dose.value as? String ?? ""
@@ -80,7 +85,9 @@ final class SmartMealHandoffUITests: XCTestCase {
         XCTAssertTrue(use.waitForExistence(timeout: 5)); XCTAssertTrue(use.isEnabled)
         XCTAssertTrue(use.label.contains("0.65")); use.tap()
         let mealDose = app.textFields["meal-input-bolus-amount"]
-        for _ in 0 ..< 5 where !mealDose.isHittable { app.swipeUp() }
+        for _ in 0 ..< 5 where !mealDose.isHittable {
+            app.swipeUp()
+        }
         XCTAssertTrue(mealDose.waitForExistence(timeout: 10))
         XCTAssertEqual(mealDose.value as? String, "0.65")
         let mealCarbs = app.textFields["meal-input-carbs"]

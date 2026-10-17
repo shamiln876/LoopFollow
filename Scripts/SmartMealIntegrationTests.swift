@@ -1,3 +1,6 @@
+// LoopFollow
+// SmartMealIntegrationTests.swift
+
 import Foundation
 @testable import LoopFollow
 import Testing
@@ -9,12 +12,13 @@ import Testing
     private let bundleID = "test.trio"
     private var config: LoopFollow.SmartMealConfiguration {
         .init(percentage: 90, maxIOB: 10, maxCOB: 125, maxBolus: 9,
-            maxCarbs: 150, maxFat: 100, maxProtein: 100, bolusIncrement: 0.05)
+              maxCarbs: 150, maxFat: 100, maxProtein: 100, bolusIncrement: 0.05)
     }
+
     private func senderRequest(_ preset: LoopFollow.SmartMealPreset, dose: Double? = nil) throws -> LoopFollow.SmartMealRequest {
         var snapshot = LoopFollow.MealReviewSnapshot(date: now, carbRatio: 10, ratioSource: "Trio reported", iob: 1, iobDate: now, cob: 0)
         snapshot.smartMeal = .init(protocolVersion: 1, generatedAt: now.timeIntervalSince1970,
-            calculationAt: now.timeIntervalSince1970, bundleIdentifier: bundleID, enabled: true, configuration: config, receipts: [])
+                                   calculationAt: now.timeIntervalSince1970, bundleIdentifier: bundleID, enabled: true, configuration: config, receipts: [])
         snapshot.trioVersion = "1.0.2"; snapshot.effectiveISF = 40; snapshot.isfSource = "Trio structured effective ISF"
         snapshot.targetMgdl = 100; snapshot.minPredMgdl = 100; snapshot.minGuardMgdl = 100
         snapshot.activity = 0.01; snapshot.calculationIOB = 1; snapshot.reportedBolusIncrement = 0.05
@@ -22,16 +26,17 @@ import Testing
         let settings = try #require(LoopFollow.SmartMealDelivery.liveSettings(snapshot: snapshot, source: source, bundleID: bundleID, now: now))
         let samples: [LoopFollow.MealReviewCalculation.GlucoseSample] = [.init(date: now.addingTimeInterval(-900), mgdl: 140), .init(date: now, mgdl: 140)]
         let full = try #require(LoopFollow.MealReviewFullCalculation.review(newCarbs: 80, settings: settings, snapshot: snapshot,
-            source: source, samples: samples, newestTreatment: nil, now: now))
+                                                                            source: source, samples: samples, newestTreatment: nil, now: now))
         let proposedPlan = LoopFollow.RiceMealPlan(carbs: 80, fullRecommendation: full.rounded,
-            upfrontPercent: preset.insulinPercent, confirmedAt: now, carbsNowPercent: preset.carbsNowPercent,
-            delayMinutes: preset.delayMinutes, upfrontInsulinOverride: dose)
+                                                   upfrontPercent: preset.insulinPercent, confirmedAt: now, carbsNowPercent: preset.carbsNowPercent,
+                                                   delayMinutes: preset.delayMinutes, upfrontInsulinOverride: dose)
         let plan = try #require(proposedPlan)
         let draft = try #require(LoopFollow.SmartMealDraft.make(plan: plan, protein: 0, fat: 0, settings: settings,
-            snapshot: snapshot, source: source, samples: samples, newestTreatment: nil, now: now))
+                                                                snapshot: snapshot, source: source, samples: samples, newestTreatment: nil, now: now))
         return try #require(LoopFollow.SmartMealDelivery.request(draft: draft, bolus: plan.upfrontInsulin,
-            protein: 0, fat: 0, snapshot: snapshot, settings: settings, bundleID: bundleID, now: now))
+                                                                 protein: 0, fat: 0, snapshot: snapshot, settings: settings, bundleID: bundleID, now: now))
     }
+
     private func decodeAtTrio(_ request: LoopFollow.SmartMealRequest) throws -> Trio.SmartMealRequest {
         let payload = LoopFollow.CommandPayload(user: "synthetic", commandType: .smartMeal, timestamp: request.confirmedAt, smartMeal: request)
         let wire = try JSONEncoder().encode(payload)
@@ -44,6 +49,7 @@ import Testing
         try decoded.validate(configuration: nativeConfig, now: now)
         return decoded
     }
+
     private actor Effects {
         var stored: [[Int]] = []; var boluses: [Decimal] = []
         func store(_ request: Trio.SmartMealRequest) { stored.append([request.immediateCarbs, request.delayedCarbs]) }
@@ -62,13 +68,13 @@ import Testing
             let journal = LoopFollow.SmartMealSendJournal(directory: root.appendingPathComponent("sender"))
             #expect(journal.claim(request: request, source: source))
             let receipt = try await receiver.execute(decoded, now: now, validate: {},
-                store: { await effects.store(decoded) }, bolus: { await effects.bolus(decoded.bolusAmount) })
+                                                     store: { await effects.store(decoded) }, bolus: { await effects.bolus(decoded.bolusAmount) })
             #expect(receipt.phase == .accepted && receipt.request.totalCarbs == 80)
             #expect(receipt.request.delayedAt == (preset.delayMinutes == 0 ? nil : now.addingTimeInterval(preset.delayMinutes * 60).timeIntervalSince1970))
             let nativeConfig = try JSONDecoder().decode(Trio.SmartMealConfiguration.self, from: JSONEncoder().encode(config))
             let status = Trio.SmartMealReceiverStatus(protocolVersion: 1, generatedAt: now.timeIntervalSince1970,
-                calculationAt: now.timeIntervalSince1970, bundleIdentifier: bundleID, enabled: true,
-                configuration: nativeConfig, receipts: [receipt])
+                                                      calculationAt: now.timeIntervalSince1970, bundleIdentifier: bundleID, enabled: true,
+                                                      configuration: nativeConfig, receipts: [receipt])
             let returned = try JSONDecoder().decode(LoopFollow.SmartMealReceiverStatus.self, from: JSONEncoder().encode(status))
             #expect(journal.receive(returned, source: source, bundleID: bundleID, now: now)?.phase == .accepted)
             #expect(!journal.hasPending(source: source))
@@ -77,6 +83,7 @@ import Testing
             #expect(await effects.counts() == [1, 1])
         }
     }
+
     @Test func editedUnitsAndZeroInsulinRemainExactAcrossBothApps() async throws {
         for amount in [0.65, 0.0] {
             let request = try senderRequest(.rice, dose: amount)

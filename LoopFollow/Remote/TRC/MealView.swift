@@ -412,7 +412,7 @@ struct MealView: View {
 
     private var batchAvailable: Bool {
         SmartMealDelivery.available(snapshot: liveMealSnapshot.value, settings: Storage.shared.mealReviewSettings.value,
-            bundleID: Storage.shared.bundleId.value, now: Date())
+                                    bundleID: Storage.shared.bundleId.value, now: Date())
     }
 
     private var isButtonDisabled: Bool {
@@ -428,12 +428,12 @@ struct MealView: View {
             let current = Date()
             // A receiver-backed draft must never downgrade to the legacy command.
             guard !advisorAttempted,
-                  ((draft.plan.delayedCarbs == 0 && draft.settings.receiverConfigurationID == nil) || batchAvailable), !isScheduling,
+                  (draft.plan.delayedCarbs == 0 && draft.settings.receiverConfigurationID == nil) || batchAvailable, !isScheduling,
                   draft.isCurrent(now: current, settings: Storage.shared.mealReviewSettings.value,
                                   snapshot: Observable.shared.mealReview.value, source: Storage.shared.url.value),
                   MealReviewCalculation.reasons(snapshot: Observable.shared.mealReview.value,
-                    samples: Observable.shared.mealReviewGlucose.value,
-                    newestTreatment: Observable.shared.mealReviewNewestTreatment.value, now: current).isEmpty,
+                                                samples: Observable.shared.mealReviewGlucose.value,
+                                                newestTreatment: Observable.shared.mealReviewNewestTreatment.value, now: current).isEmpty,
                   carbs.doubleValue(for: .gram()) == Double(draft.plan.immediateCarbs),
                   bolusAmount.doubleValue(for: .internationalUnit()) <= maxBolus.value.doubleValue(for: .internationalUnit()),
                   bolusAmount.doubleValue(for: .internationalUnit()) >= 0,
@@ -442,7 +442,8 @@ struct MealView: View {
                   fat.doubleValue(for: .gram()) >= 0,
                   protein.doubleValue(for: .gram()) <= maxProtein.value.doubleValue(for: .gram()),
                   fat.doubleValue(for: .gram()) <= maxFat.value.doubleValue(for: .gram()),
-                  carbs.doubleValue(for: .gram()) <= maxCarbs.value.doubleValue(for: .gram()) else {
+                  carbs.doubleValue(for: .gram()) <= maxCarbs.value.doubleValue(for: .gram())
+            else {
                 alertMessage = "Advisor draft held. Changed carbs, stale inputs/settings or missing Trio capability require a fresh review. Nothing sent."
                 alertType = .validationError
                 showAlert = true
@@ -450,9 +451,9 @@ struct MealView: View {
             }
             if batchAvailable {
                 smartRequest = SmartMealDelivery.request(draft: draft, bolus: bolusAmount.doubleValue(for: .internationalUnit()),
-                    protein: protein.doubleValue(for: .gram()), fat: fat.doubleValue(for: .gram()),
-                    snapshot: liveMealSnapshot.value, settings: Storage.shared.mealReviewSettings.value,
-                    bundleID: Storage.shared.bundleId.value, now: current)
+                                                         protein: protein.doubleValue(for: .gram()), fat: fat.doubleValue(for: .gram()),
+                                                         snapshot: liveMealSnapshot.value, settings: Storage.shared.mealReviewSettings.value,
+                                                         bundleID: Storage.shared.bundleId.value, now: current)
                 guard smartRequest != nil else {
                     alertMessage = "Smart meal held: invalid meal values or changed receiver settings. Review again. Nothing sent."
                     alertType = .validationError; showAlert = true; return
@@ -529,7 +530,7 @@ struct MealView: View {
             pushNotificationManager.sendSmartMealPushNotification(request: smartRequest, completion: completion)
         } else {
             pushNotificationManager.sendMealPushNotification(carbs: carbs, protein: protein, fat: fat,
-                bolusAmount: bolusAmount, scheduledTime: scheduledDate, completion: completion)
+                                                             bolusAmount: bolusAmount, scheduledTime: scheduledDate, completion: completion)
         }
     }
 

@@ -1,11 +1,15 @@
+// LoopFollow
+// RiceMealPlanTests.swift
+
 import Foundation
 @testable import LoopFollow
 import Testing
+
 struct RiceMealPlanTests {
     @Test func editedUnitsReplaceSuggestedUnitsWithoutApplyingPercentageAgain() throws {
         let now = Date()
         let manual = try #require(RiceMealPlan(carbs: 80, fullRecommendation: 5.8, upfrontPercent: 75,
-            confirmedAt: now, upfrontInsulinOverride: 0.65))
+                                               confirmedAt: now, upfrontInsulinOverride: 0.65))
         #expect(manual.upfrontInsulin == 0.65)
         #expect(manual.suggestedUpfrontInsulin == 4.35)
         #expect(manual.usesManualBolus)
@@ -29,20 +33,22 @@ struct RiceMealPlanTests {
         #expect(plan(80, 5.8, 60)!.upfrontInsulin == 3.45)
         #expect(plan(80, 5.8, 0)!.upfrontInsulin == 0)
         #expect(plan(80, 5.8, 100)!.upfrontInsulin == 5.8)
-        for total in 4...1000 {
+        for total in 4 ... 1000 {
             let p = plan(Double(total))!
             #expect(p.immediateCarbs + p.delayedCarbs == total)
             #expect(p.delayedCarbs > 0 && p.delayedInsulin == 0)
             #expect(abs(Double(p.delayedCarbs) - Double(total) * 0.25) <= 0.5)
         }
-        for invalid in [Double.nan, .infinity, -.infinity, -1, 0, 4.5, 1001] { #expect(plan(invalid) == nil) }
+        for invalid in [Double.nan, .infinity, -.infinity, -1, 0, 4.5, 1001] {
+            #expect(plan(invalid) == nil)
+        }
         for invalid in [Double.nan, .infinity, -.infinity, -1, 101] {
             #expect(plan(80, invalid) == nil)
             #expect(plan(80, 5.8, invalid) == nil)
         }
         #expect(RiceMealPlan.sendingBlocker.contains("Nothing has been sent or scheduled"))
-
     }
+
     @Test func allPresetsAndIndependentControls() {
         let date = Date()
         for preset in SmartMealPreset.allCases {
@@ -57,7 +63,7 @@ struct RiceMealPlanTests {
             }
             if preset == .fruit { #expect(p.immediateCarbs == 80 && p.delayedCarbs == 0 && p.upfrontInsulin == 5.8) }
         }
-        for total in 1...1000 {
+        for total in 1 ... 1000 {
             for split in [0.0, 25, 70, 75, 100] {
                 let p = RiceMealPlan(carbs: Double(total), fullRecommendation: 5.8, upfrontPercent: 60,
                                      confirmedAt: date, carbsNowPercent: split, delayMinutes: 60)!
@@ -115,9 +121,9 @@ struct RiceMealPlanTests {
 
     @Test func fullCarbsThenExistingNinetyPercentThenPreset() {
         let settings = MealReviewSettings(percentage: 90, maxIOB: 20, maxCOB: 120, maxBolus: 10,
-            sourceFingerprint: "fixture", trioVersion: "1.0.2", checkedAt: Date())
+                                          sourceFingerprint: "fixture", trioVersion: "1.0.2", checkedAt: Date())
         let full = MealReviewFullCalculation.calculate(newCarbs: 80, cob: 0, ratio: 10,
-            glucose: 100, target: 100, isf: 40, iob: 0, delta: 0, settings: settings)!
+                                                       glucose: 100, target: 100, isf: 40, iob: 0, delta: 0, settings: settings)!
         let rice = RiceMealPlan(carbs: 80, fullRecommendation: full.rounded, upfrontPercent: 75, confirmedAt: Date())!
         #expect(full.rounded == 7.2)
         #expect(rice.immediateCarbs == 60)
@@ -129,7 +135,7 @@ struct RiceMealPlanTests {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let source = "https://example.invalid"
         let saved = MealReviewSettings(percentage: 90, maxIOB: 20, maxCOB: 120, maxBolus: 10,
-            sourceFingerprint: MealReviewSettings.fingerprint(source), trioVersion: "1.0.2", checkedAt: now)
+                                       sourceFingerprint: MealReviewSettings.fingerprint(source), trioVersion: "1.0.2", checkedAt: now)
         var snapshot = MealReviewSnapshot(date: now, carbRatio: 10, ratioSource: "Trio reported", iob: 0, iobDate: now, cob: 0)
         snapshot.effectiveISF = 40
         snapshot.isfSource = "Trio structured effective ISF"
@@ -144,7 +150,7 @@ struct RiceMealPlanTests {
         func make(_ settings: MealReviewSettings = saved, full: Double = 7.2, protein: Double = 0) -> SmartMealDraft? {
             let plan = RiceMealPlan(carbs: 80, fullRecommendation: full, upfrontPercent: 75, confirmedAt: now)!
             return SmartMealDraft.make(plan: plan, protein: protein, fat: 0, settings: settings, snapshot: snapshot,
-                source: source, samples: samples, newestTreatment: nil, now: now)
+                                       source: source, samples: samples, newestTreatment: nil, now: now)
         }
         // No manually copied recommendation is supplied to the production factory.
         #expect(make()?.plan.upfrontInsulin == 5.4)
@@ -152,18 +158,17 @@ struct RiceMealPlanTests {
         #expect(make(full: 5.4) == nil) // Never calculate from only the 60 g now.
         #expect(make(protein: .nan) == nil)
         let historical = MealReviewSettings(percentage: 90, maxIOB: 20, maxCOB: 120, maxBolus: 10,
-            sourceFingerprint: MealReviewSettings.fingerprint(source), trioVersion: "1.0.2", checkedAt: now, historicalReference: "Fixture")
+                                            sourceFingerprint: MealReviewSettings.fingerprint(source), trioVersion: "1.0.2", checkedAt: now, historicalReference: "Fixture")
         #expect(make(historical) == nil)
         let expired = MealReviewSettings(percentage: 90, maxIOB: 20, maxCOB: 120, maxBolus: 10,
-            sourceFingerprint: MealReviewSettings.fingerprint(source), trioVersion: "1.0.2", checkedAt: now.addingTimeInterval(-86401))
+                                         sourceFingerprint: MealReviewSettings.fingerprint(source), trioVersion: "1.0.2", checkedAt: now.addingTimeInterval(-86401))
         #expect(make(expired) == nil)
         snapshot.minGuardMgdl = 60
         #expect(MealReviewFullCalculation.comparison(newCarbs: 80, settings: saved, snapshot: snapshot, source: source,
-            samples: samples, newestTreatment: nil, now: now)?.rounded == 7.2)
+                                                     samples: samples, newestTreatment: nil, now: now)?.rounded == 7.2)
         #expect(make() == nil) // A visible comparison never clears the low-forecast hold.
         snapshot.minGuardMgdl = 100
         snapshot.isfSource = "Trio reason (rounded)"
         #expect(make() == nil)
     }
-
 }

@@ -166,7 +166,7 @@ class PushNotificationManager {
 
     func sendSmartMealPushNotification(request: SmartMealRequest, completion: @escaping (Bool, String?) -> Void) {
         let payload = CommandPayload(user: user, commandType: .smartMeal, timestamp: request.confirmedAt,
-            returnNotification: createReturnNotificationInfo(), smartMeal: request)
+                                     returnNotification: createReturnNotificationInfo(), smartMeal: request)
         sendEncryptedCommand(payload: payload, completion: completion)
     }
 
