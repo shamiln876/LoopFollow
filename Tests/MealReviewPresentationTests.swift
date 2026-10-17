@@ -85,6 +85,18 @@ final class MealReviewPresentationTests: XCTestCase {
         defer { window.isHidden = true; previousWindow?.makeKeyAndVisible() }
         try await Task.sleep(nanoseconds: 500_000_000)
         controller.view.layoutIfNeeded()
+        if lowForecast {
+            func scrollViews(in view: UIView) -> [UIScrollView] {
+                (view as? UIScrollView).map { [$0] } ?? view.subviews.flatMap { scrollViews(in: $0) }
+            }
+            let form = try XCTUnwrap(scrollViews(in: controller.view).max { $0.contentSize.height < $1.contentSize.height })
+            // Capture the calculation itself, rather than only the form header.
+            let offset = min(820, max(0, form.contentSize.height - form.bounds.height))
+            XCTAssertGreaterThan(offset, 0)
+            form.setContentOffset(CGPoint(x: 0, y: offset), animated: false)
+            try await Task.sleep(nanoseconds: 500_000_000)
+            controller.view.layoutIfNeeded()
+        }
         let renderer = UIGraphicsImageRenderer(bounds: window.bounds)
         let image = renderer.image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
         XCTAssertGreaterThan(image.pngData()?.count ?? 0, 1000)
