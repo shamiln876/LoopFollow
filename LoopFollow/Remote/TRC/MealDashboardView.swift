@@ -14,6 +14,7 @@ struct MealDashboardHomeCard: View {
     @ObservedObject private var source = Storage.shared.url
     @State private var refreshAnchor = Date()
     @State private var presented = false
+    @State private var tempTargetPresented = false
     @State private var mealRoute: MealRoute?
 
     private struct MealRoute: Identifiable {
@@ -33,14 +34,21 @@ struct MealDashboardHomeCard: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("home-meal-dashboard")
-                Button {
-                    advisorDraft = nil
-                    mealRoute = MealRoute(draft: nil)
-                } label: {
-                    Label("Enter meal", systemImage: "square.and.pencil")
-                        .frame(maxWidth: .infinity, minHeight: 36)
+                HStack {
+                    Button {
+                        advisorDraft = nil
+                        mealRoute = MealRoute(draft: nil)
+                    } label: {
+                        Label("Enter meal", systemImage: "square.and.pencil")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .accessibilityIdentifier("home-enter-meal")
+                    Button { tempTargetPresented = true } label: {
+                        Label("Temp Target", systemImage: "scope")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .accessibilityIdentifier("home-temp-target")
                 }
-                .accessibilityIdentifier("home-enter-meal")
             }
             .sheet(isPresented: $presented, onDismiss: {
                 if let advisorDraft { mealRoute = MealRoute(draft: advisorDraft) }
@@ -48,6 +56,7 @@ struct MealDashboardHomeCard: View {
                 MealReviewView(initialCarbs: 0, onUse: { advisorDraft = $0 })
             }
             .sheet(item: $mealRoute) { route in MealView(initialAdvisorDraft: route.draft) }
+            .sheet(isPresented: $tempTargetPresented) { TempTargetView(showsCloseButton: true) }
         }
     }
 }
