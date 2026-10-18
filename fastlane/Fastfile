@@ -65,7 +65,7 @@ platform :ios do
       api_key: api_key,
     )
 
-    current_build_number = previous_build_number + 1
+    current_build_number = [previous_build_number + 1, ENV.fetch("MINIMUM_BUILD_NUMBER", "0").to_i].max
 
     increment_build_number(
       xcodeproj: "#{GITHUB_WORKSPACE}/LoopFollow.xcodeproj",
@@ -74,6 +74,7 @@ platform :ios do
     
     match(
       type: "appstore",
+      readonly: ENV["MATCH_READONLY"] == "true",
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
       app_identifier: [
         APP_IDENTIFIER,
@@ -132,7 +133,8 @@ platform :ios do
       api_key: api_key,
       skip_submission: false,
       ipa: "LoopFollow.ipa",
-      skip_waiting_for_build_processing: true,
+      skip_waiting_for_build_processing: ENV["WAIT_FOR_PROCESSING"] != "true",
+      changelog: "Smart Meal Advisor " + last_git_commit[:abbreviated_commit_hash],
     )
   end
 
