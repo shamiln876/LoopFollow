@@ -7,8 +7,8 @@ struct InfoTableView: View {
     @ObservedObject var infoManager: InfoManager
     var timeZoneOverride: String?
 
-    @ScaledMetric(relativeTo: .body) private var fontSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 19
+    @ScaledMetric(relativeTo: .body) private var fontSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 22
 
     var body: some View {
         List {
