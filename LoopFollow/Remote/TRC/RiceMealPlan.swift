@@ -5,7 +5,7 @@ import Foundation
 
 /// Preview only. This type has no transport, credentials, timers, or delivery side effects.
 enum SmartMealPreset: String, CaseIterable, Identifiable {
-    case rice = "Rice", pizza = "Pizza", fruit = "Fruit & Dessert", custom = "Custom"
+    case fruit = "Full Meal Bolus", rice = "Rice · 75/25 split", pizza = "Pizza", custom = "Custom"
     var id: String { rawValue }
     var carbsNowPercent: Double { switch self { case .rice: 75; case .pizza: 70; default: 100 } }
     var insulinPercent: Double { switch self { case .rice: 75; case .pizza: 70; default: 100 } }

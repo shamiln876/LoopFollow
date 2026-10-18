@@ -1,20 +1,20 @@
 # Smart Meal Advisor
 
-The advisor is built into regular LoopFollow. Build 15 adds an editable insulin amount before the Meal handoff and a matching, versioned Trio receiver for split carbs. Build 14 remains the last verified installation on the user's iPhone; building source does not install either app.
+The advisor is built into regular LoopFollow. Build 16 defaults to Full Meal Bolus (100%), places Rice · 75/25 split next, and removes the IOB/COB duration captions from the corner information table. The upfront insulin remains editable before its exact transfer into Meal. Split carbs require the matching, versioned Trio receiver. Building source does not install either app.
 
 ## Daily workflow
 
 1. Open **Home → Smart Meal Advisor**, or open it inside **Meal**.
-2. Enter the full meal carbs or choose foods from the Carnival guide. Select Rice, Pizza, Fruit & Dessert, or Custom.
+2. Enter the full meal carbs or choose foods from the Carnival guide. The default is Full Meal Bolus (100% carbs and 100% of the adjusted recommendation). Select Rice · 75/25 split, Pizza, or Custom when needed.
 3. Review the **Full recommendation** and **Suggested upfront** amount. Keep it, or edit **Your upfront bolus (U)** directly. The edited number is copied exactly; no percentage is applied to it again.
 4. Tap **Use these values**. The standard Meal screen receives the selected carbs, dose and any explicitly selected nutrients.
 5. Review Meal, tap **Send Meal**, then use the standard confirmation/authentication. The advisor itself cannot send treatments.
 
 | Preset | Carbs now | Carbs later | Delay | Initial insulin selection |
 |---|---:|---:|---:|---:|
-| Rice | 75% | 25% | 30 minutes | 75% |
+| Full Meal Bolus (default) | 100% | none | none | 100% |
+| Rice · 75/25 split | 75% | 25% | 30 minutes | 75% |
 | Pizza | 70% | 30% | 60 minutes | 70% |
-| Fruit & Dessert | 100% | none | none | 100% |
 | Custom | 100% initially | editable | editable | 100% initially |
 
 Expand **Change carb split or insulin percentage** to edit the independent controls. Whole-gram rounding preserves total carbs. These are editable test defaults, not validated patient treatment settings.
@@ -62,7 +62,7 @@ Verified during this iteration: 40 LoopFollow calculation/freshness/draft/reques
 
 ## Installation
 
-Update the existing apps in place with their original bundle IDs, signing team and App Groups. Back up settings/Documents and retain the prior signed build first; do not uninstall. Install regular LoopFollow build 15 on the caregiver phone and the matching Trio receiver update on the pump-controller phone. Verify the actual installed versions and preserved configuration after each update. No test should send a hypothetical meal or insulin to the live controller.
+Update the existing apps in place with their original bundle IDs, signing team and App Groups. Back up settings/Documents and retain the prior signed build first; do not uninstall. Install regular LoopFollow build 16 on the caregiver phone and the matching Trio receiver update on the pump-controller phone. Verify the actual installed versions and preserved configuration after each update. No test should send a hypothetical meal or insulin to the live controller.
 
 Actual bolus/SMB/peak/nadir outcome logging remains deferred. No live treatments, authentication or pump-setting changes were exercised in development. Physical-device behavior and clinical efficacy are not established by simulator tests.
 

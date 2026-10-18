@@ -128,15 +128,15 @@ final class MealReviewPresentationTests: XCTestCase {
             let fullResult = try XCTUnwrap(MealReviewFullCalculation.comparison(newCarbs: 80, settings: settings.value, snapshot: snapshot, source: testSource, samples: Observable.shared.mealReviewGlucose.value, newestTreatment: nil, now: Date()))
             try XCTUnwrap(review).useRecommendation(full: fullResult.rounded)
             let draft = try XCTUnwrap(transferred)
-            XCTAssertEqual(draft.plan.immediateCarbs, 60)
-            XCTAssertEqual(draft.plan.delayedCarbs, 20)
+            XCTAssertEqual(draft.plan.immediateCarbs, 80)
+            XCTAssertEqual(draft.plan.delayedCarbs, 0)
             XCTAssertEqual(draft.protein, 0)
             XCTAssertEqual(draft.fat, 0)
             let full = try XCTUnwrap(MealReviewFullCalculation.review(newCarbs: 80, settings: settings.value, snapshot: snapshot, source: testSource, samples: Observable.shared.mealReviewGlucose.value, newestTreatment: nil, now: Date()))
             XCTAssertEqual(draft.plan.fullRecommendation, full.rounded)
-            XCTAssertEqual(draft.plan.upfrontInsulin, manualBolus ?? 6.65, accuracy: 0.00001)
+            XCTAssertEqual(draft.plan.upfrontInsulin, manualBolus ?? full.rounded, accuracy: 0.00001)
             XCTAssertEqual(draft.plan.usesManualBolus, manualBolus != nil)
-            XCTAssertNotEqual(draft.plan.upfrontInsulin, full.rounded)
+            if manualBolus != nil { XCTAssertNotEqual(draft.plan.upfrontInsulin, full.rounded) }
         }
         if checkSettingsAction {
             let full = try XCTUnwrap(MealReviewFullCalculation.comparison(newCarbs: 80, settings: settings.value, snapshot: snapshot, source: testSource, samples: Observable.shared.mealReviewGlucose.value, newestTreatment: nil, now: Date()))

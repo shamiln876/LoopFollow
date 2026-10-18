@@ -10,6 +10,10 @@ final class SmartMealHandoffUITests: XCTestCase {
         exerciseHandoff(fromMeal: false)
     }
 
+    func testRiceSplitEditedUnitsPopulateMeal() {
+        exerciseHandoff(fromMeal: false, riceSplit: true)
+    }
+
     func testMealAdvisorEditedUnitsPopulateExistingMeal() {
         exerciseHandoff(fromMeal: true)
     }
@@ -46,6 +50,7 @@ final class SmartMealHandoffUITests: XCTestCase {
         app.launch()
         let home = app.buttons["home-meal-dashboard"]
         XCTAssertTrue(home.waitForExistence(timeout: 30)); home.tap()
+        selectRice(app)
         let carbs = app.textFields["advisor-meal-carbs"]
         XCTAssertTrue(carbs.waitForExistence(timeout: 10)); carbs.tap(); carbs.typeText("80")
         hideKeyboard(app)
@@ -57,7 +62,7 @@ final class SmartMealHandoffUITests: XCTestCase {
         app.terminate()
     }
 
-    private func exerciseHandoff(fromMeal: Bool) {
+    private func exerciseHandoff(fromMeal: Bool, riceSplit: Bool = false) {
         let app = XCUIApplication()
         app.launchArguments = ["--smart-meal-ui-test"]
         app.launch()
@@ -68,6 +73,7 @@ final class SmartMealHandoffUITests: XCTestCase {
             let openAdvisor = app.buttons["meal-open-advisor"]
             XCTAssertTrue(openAdvisor.waitForExistence(timeout: 10)); openAdvisor.tap()
         }
+        if riceSplit { selectRice(app) }
         let carbs = app.textFields["advisor-meal-carbs"]
         XCTAssertTrue(carbs.waitForExistence(timeout: 10)); carbs.tap(); carbs.typeText("80")
         hideKeyboard(app)
@@ -76,6 +82,7 @@ final class SmartMealHandoffUITests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(dose.isHittable)
+        XCTAssertTrue(app.staticTexts[riceSplit ? "Suggested upfront (75%)" : "Suggested upfront (100%)"].exists)
         dose.tap()
         let previous = dose.value as? String ?? ""
         dose.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: previous.count) + "0.65")
@@ -91,7 +98,7 @@ final class SmartMealHandoffUITests: XCTestCase {
         XCTAssertTrue(mealDose.waitForExistence(timeout: 10))
         XCTAssertEqual(mealDose.value as? String, "0.65")
         let mealCarbs = app.textFields["meal-input-carbs"]
-        XCTAssertEqual(mealCarbs.value as? String, "60")
+        XCTAssertEqual(mealCarbs.value as? String, riceSplit ? "60" : "80")
         XCTAssertFalse(app.staticTexts["Split meal sending is unavailable"].exists)
         XCTAssertTrue(app.buttons["Send Meal"].isEnabled)
         let capture = XCTAttachment(screenshot: app.screenshot())
@@ -99,6 +106,12 @@ final class SmartMealHandoffUITests: XCTestCase {
         capture.lifetime = .keepAlways; add(capture)
         // Never tap Send Meal or authenticate. No credential/transport is configured.
         app.terminate()
+    }
+
+    private func selectRice(_ app: XCUIApplication) {
+        let picker = app.descendants(matching: .any)["advisor-preset"].firstMatch
+        XCTAssertTrue(picker.waitForExistence(timeout: 10)); picker.tap()
+        app.buttons["Rice · 75/25 split"].tap()
     }
 
     private func hideKeyboard(_ app: XCUIApplication) {

@@ -9,14 +9,14 @@ import UIKit
 struct MealReviewView: View {
     let initialCarbs: Double
     @Environment(\.dismiss) private var dismiss
-    @State private var preset: SmartMealPreset = .rice
-    @State private var carbsNowText = "75"
-    @State private var delayText = "30"
+    @State private var preset: SmartMealPreset = .fruit
+    @State private var carbsNowText = "100"
+    @State private var delayText = "0"
     @State private var proteinText = ""
     @State private var fatText = ""
     @State private var sendFatProtein = false
     private let onUse: (SmartMealDraft) -> Void
-    @State private var customPercent = "75"
+    @State private var customPercent = "100"
     @State private var bolusOverrideText: String?
     @FocusState private var bolusFocused: Bool
     @State private var carbText: String
