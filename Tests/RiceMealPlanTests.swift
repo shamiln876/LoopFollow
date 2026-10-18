@@ -77,6 +77,23 @@ struct RiceMealPlanTests {
         }
     }
 
+    @Test func fivePercentSelectionsKeepTheChosenCarbSplit() throws {
+        for preset in SmartMealPreset.allCases {
+            var previous = 0.0
+            for percent in stride(from: 0.0, through: 100.0, by: 5.0) {
+                let plan = try #require(RiceMealPlan(carbs: 80, fullRecommendation: 5.8, upfrontPercent: percent,
+                                                     confirmedAt: Date(), carbsNowPercent: preset.carbsNowPercent,
+                                                     delayMinutes: preset.delayMinutes, preset: preset))
+                #expect(plan.immediateCarbs == (preset == .rice ? 60 : preset == .pizza ? 56 : 80))
+                #expect(plan.immediateCarbs + plan.delayedCarbs == 80)
+                #expect(plan.upfrontInsulin >= previous)
+                #expect(plan.upfrontInsulin <= 5.8 * percent / 100 + 0.000001)
+                #expect(plan.delayedInsulin == 0)
+                previous = plan.upfrontInsulin
+            }
+        }
+    }
+
     @Test func draftFreshnessAndHistoricalGuards() {
         let now = Date()
         let source = "https://example.invalid"

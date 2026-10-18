@@ -1,12 +1,12 @@
 # Smart Meal Advisor
 
-The advisor is built into regular LoopFollow. Build 17 defaults to Full Meal Bolus (100%), places Rice · 75/25 split next, and removes the IOB/COB duration captions from the corner information table. Its text/rows are smaller and SAGE/CAGE are hidden once; they can be enabled again in Information Display settings. The upfront insulin remains editable before its exact transfer into Meal. Reopening unchanged, still-current verified settings needs no repeated checkbox and does not refresh their verification time. Split carbs require the matching, versioned Trio receiver. Building source does not install either app.
+The advisor is built into regular LoopFollow. Build 18 defaults to Full Meal Bolus (100%), places Rice · 75/25 split next, and removes the IOB/COB duration captions from the corner information table. Its text/rows are smaller and SAGE/CAGE are hidden once; they can be enabled again in Information Display settings. The upfront insulin remains editable before its exact transfer into Meal. Reopening unchanged, still-current verified settings needs no repeated checkbox and does not refresh their verification time. Split carbs require the matching, versioned Trio receiver. Building source does not install either app.
 
 ## Daily workflow
 
 1. Open **Home → Smart Meal Advisor**, or open it inside **Meal**.
 2. Enter the full meal carbs or choose foods from the Carnival guide. The default is Full Meal Bolus (100% carbs and 100% of the adjusted recommendation). Select Rice · 75/25 split, Pizza, or Custom when needed.
-3. Review the **Full recommendation** and **Suggested upfront** amount. Keep it, or edit **Your upfront bolus (U)** directly. The edited number is copied exactly; no percentage is applied to it again.
+3. Use the visible **− / +** insulin controls for 5-percentage-point changes without altering the carb split. Review the **Full recommendation** and **Suggested upfront** amount. Keep it, or edit **Your upfront bolus (U)** directly. The edited number is copied exactly; no percentage is applied to it again.
 4. Tap **Use these values**. The standard Meal screen receives the selected carbs, dose and any explicitly selected nutrients.
 5. Review Meal, tap **Send Meal**, then use the standard confirmation/authentication. The advisor itself cannot send treatments.
 
@@ -62,7 +62,7 @@ Verified during this iteration: 40 LoopFollow calculation/freshness/draft/reques
 
 ## Installation
 
-Update the existing apps in place with their original bundle IDs, signing team and App Groups. Back up settings/Documents and retain the prior signed build first; do not uninstall. Install regular LoopFollow build 17 on the caregiver phone and the matching Trio receiver update on the pump-controller phone. Verify the actual installed versions and preserved configuration after each update. No test should send a hypothetical meal or insulin to the live controller.
+Update the existing apps in place with their original bundle IDs, signing team and App Groups. Back up settings/Documents and retain the prior signed build first; do not uninstall. Install regular LoopFollow build 18 on the caregiver phone and the matching Trio receiver update on the pump-controller phone. Verify the actual installed versions and preserved configuration after each update. No test should send a hypothetical meal or insulin to the live controller.
 
 Actual bolus/SMB/peak/nadir outcome logging remains deferred. No live treatments, authentication or pump-setting changes were exercised in development. Physical-device behavior and clinical efficacy are not established by simulator tests.
 

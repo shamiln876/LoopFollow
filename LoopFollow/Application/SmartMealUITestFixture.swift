@@ -11,6 +11,9 @@
         static var enabled: Bool { ProcessInfo.processInfo.arguments.contains("--smart-meal-ui-test") }
         private static var configured = false
         @State private var mealPresented = false
+        @State private var percentageAdvisorPresented = false
+        @State private var percentageMealPresented = false
+        @State private var percentageDraft: SmartMealDraft?
 
         @MainActor static func configure() {
             guard !configured else { return }
@@ -53,10 +56,22 @@
             VStack(spacing: 24) {
                 Text("Synthetic meal workflow test").font(.caption)
                 MealDashboardHomeCard()
+                if ProcessInfo.processInfo.arguments.contains("--smart-meal-percentage-test") {
+                    Button("Review synthetic 80 g meal") { percentageAdvisorPresented = true }
+                        .accessibilityIdentifier("fixture-percentage-advisor")
+                }
                 Button("Open Meal") { mealPresented = true }.accessibilityIdentifier("fixture-open-meal")
             }
             .padding()
             .sheet(isPresented: $mealPresented) { MealView() }
+            .sheet(isPresented: $percentageAdvisorPresented, onDismiss: {
+                if percentageDraft != nil { percentageMealPresented = true }
+            }) {
+                MealReviewView(initialCarbs: 80) { percentageDraft = $0 }
+            }
+            .sheet(isPresented: $percentageMealPresented) {
+                if let percentageDraft { MealView(initialAdvisorDraft: percentageDraft) }
+            }
         }
     }
 #endif

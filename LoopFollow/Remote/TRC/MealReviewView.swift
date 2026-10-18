@@ -244,6 +244,25 @@ struct MealReviewView: View {
                let suggestion = RiceMealPlan(carbs: carbs, fullRecommendation: full, upfrontPercent: percent, confirmedAt: Date(), carbsNowPercent: nowPercent, delayMinutes: delay, preset: preset)
             {
                 let plan = makePlan(full: full) ?? suggestion
+                HStack {
+                    Text("Upfront insulin")
+                    Spacer()
+                    Button { adjustUpfrontPercent(by: -5) } label: {
+                        Image(systemName: "minus.circle.fill").font(.title2).frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.borderless).disabled(percent <= 0)
+                    .accessibilityLabel("Reduce upfront insulin by 5 percent")
+                    .accessibilityIdentifier("advisor-percent-decrease")
+                    Text("\(customPercent)%").monospacedDigit().frame(minWidth: 48)
+                        .accessibilityIdentifier("advisor-percent-value")
+                    Button { adjustUpfrontPercent(by: 5) } label: {
+                        Image(systemName: "plus.circle.fill").font(.title2).frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.borderless).disabled(percent >= 100)
+                    .accessibilityLabel("Increase upfront insulin by 5 percent")
+                    .accessibilityIdentifier("advisor-percent-increase")
+                }
+                Text("5% steps · carb split stays unchanged").font(.caption).foregroundStyle(.secondary)
                 row(comparisonOnly ? "Suggested comparison" : "Suggested upfront (\(customPercent)%)", units(suggestion.suggestedUpfrontInsulin))
                 HStack {
                     Text("Your upfront bolus (U)")
@@ -276,6 +295,14 @@ struct MealReviewView: View {
                 Text("No later insulin bolus. Use these values copies your choice into Meal for final confirmation.").font(.caption)
             } else { warning("Enter whole-gram carbs (1–1000), percentages from 0–100, and a positive delay for split carbs.") }
         }
+    }
+
+    private func adjustUpfrontPercent(by change: Double) {
+        guard let current = selectedPercent, current.isFinite else { return }
+        customPercent = String(format: "%g", min(100, max(0, current + change)))
+        bolusOverrideText = nil
+        bolusFocused = false
+        carbsFocused = false
     }
 
     func useRecommendation(full: Double) {
