@@ -10,6 +10,13 @@ enum SmartMealPreset: String, CaseIterable, Identifiable {
     var carbsNowPercent: Double { switch self { case .rice: 75; case .pizza: 70; default: 100 } }
     var insulinPercent: Double { switch self { case .rice: 75; case .pizza: 70; default: 100 } }
     var delayMinutes: Double { switch self { case .rice: 30; case .pizza: 60; default: 0 } }
+
+    /// A reduced linked percentage announces the same fraction of carbs now.
+    /// Preserve an explicitly chosen positive delay; otherwise use the preset delay.
+    func linkedCarbDelay(percent: Double, selectedDelay: Double) -> Double {
+        guard percent < 100 else { return 0 }
+        return selectedDelay == 0 ? (self == .pizza ? 60 : 30) : selectedDelay
+    }
 }
 
 struct RiceMealPlan: Equatable {

@@ -6,21 +6,32 @@ import XCTest
 final class SmartMealHandoffUITests: XCTestCase {
     override func setUp() { super.setUp(); continueAfterFailure = false }
 
-    func testFivePercentControlKeepsFullMealCarbsAndTransfersUnits() {
+    func testFivePercentControlLinksFullMealCarbsAndTransfersUnits() {
         exercisePercentageControl(rice: false)
     }
 
-    func testFivePercentControlKeepsRiceSplitAndTransfersUnits() {
+    func testFivePercentControlLinksRiceCarbsAndTransfersUnits() {
         exercisePercentageControl(rice: true)
     }
 
-    private func exercisePercentageControl(rice: Bool) {
+    func testCustomPercentageCanKeepCarbsIndependent() {
+        exercisePercentageControl(rice: false, linked: false)
+    }
+
+    private func exercisePercentageControl(rice: Bool, linked: Bool = true) {
         let app = XCUIApplication()
         app.launchArguments = ["--smart-meal-ui-test", "--smart-meal-percentage-test"]
         app.launch()
         let entry = app.buttons["fixture-percentage-advisor"]
         XCTAssertTrue(entry.waitForExistence(timeout: 30)); entry.tap()
         if rice { selectRice(app) }
+        if !linked {
+            app.buttons["Custom percentages and timing"].tap()
+            let toggle = app.switches["advisor-link-percentages"]
+            XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+            toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+            XCTAssertEqual(toggle.value as? String, "0")
+        }
         let decrease = app.buttons["advisor-percent-decrease"]
         for _ in 0 ..< 4 where !decrease.isHittable {
             app.swipeUp()
@@ -37,10 +48,10 @@ final class SmartMealHandoffUITests: XCTestCase {
         decrease.tap()
         let use = app.buttons["advisor-review-meal"]
         XCTAssertTrue(use.isEnabled)
-        XCTAssertTrue(use.label.contains(rice ? "60 g" : "80 g"))
+        XCTAssertTrue(use.label.contains(rice ? "56 g" : linked ? "76 g" : "80 g"), use.label)
         XCTAssertTrue(use.label.contains(rice ? "6.20" : "8.45"))
         let advisorCapture = XCTAttachment(screenshot: app.screenshot())
-        advisorCapture.name = rice ? "5 percent control preserves Rice carbs" : "5 percent control preserves full carbs"
+        advisorCapture.name = rice ? "5 percent control links Rice carbs" : "5 percent control links full meal carbs"
         advisorCapture.lifetime = .keepAlways; add(advisorCapture)
         use.tap()
         let dose = app.textFields["meal-input-bolus-amount"]
@@ -49,9 +60,9 @@ final class SmartMealHandoffUITests: XCTestCase {
         }
         XCTAssertTrue(dose.waitForExistence(timeout: 10))
         XCTAssertEqual(dose.value as? String, rice ? "6.20" : "8.45")
-        XCTAssertEqual(app.textFields["meal-input-carbs"].value as? String, rice ? "60" : "80")
+        XCTAssertEqual(app.textFields["meal-input-carbs"].value as? String, rice ? "56" : linked ? "76" : "80")
         let capture = XCTAttachment(screenshot: app.screenshot())
-        capture.name = rice ? "Rice split with independent 5 percent insulin control" : "Full carbs with independent 5 percent insulin control"
+        capture.name = rice ? "Rice split with linked 5 percent control" : "Full meal with linked 5 percent control"
         capture.lifetime = .keepAlways; add(capture)
         // Stop before Send Meal. The simulator has no treatment credentials.
         app.terminate()

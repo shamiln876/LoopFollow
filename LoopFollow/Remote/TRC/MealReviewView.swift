@@ -17,6 +17,7 @@ struct MealReviewView: View {
     @State private var sendFatProtein = false
     private let onUse: (SmartMealDraft) -> Void
     @State private var customPercent = "100"
+    @State private var linkedPercentages = true
     @State private var bolusOverrideText: String?
     @FocusState private var bolusFocused: Bool
     @State private var carbText: String
@@ -51,6 +52,7 @@ struct MealReviewView: View {
             _carbsNowText = State(initialValue: String(format: "%g", initialPlan.carbsNowPercent))
             _delayText = State(initialValue: String(format: "%g", initialPlan.delayMinutes))
             _customPercent = State(initialValue: String(format: "%g", initialPlan.upfrontPercent))
+            _linkedPercentages = State(initialValue: initialPlan.carbsNowPercent == initialPlan.upfrontPercent)
         }
     }
 
@@ -144,7 +146,10 @@ struct MealReviewView: View {
             bolusOverrideText = nil
             scheduleAudit()
         }
-        .onChange(of: customPercent) { _, _ in bolusOverrideText = nil }
+        .onChange(of: customPercent) { _, _ in
+            bolusOverrideText = nil
+            synchronizeCarbSplit()
+        }
         .onChange(of: bolusFocused) { _, focused in
             if focused {
                 // A tap should let the caregiver replace the suggested amount immediately.
@@ -169,13 +174,25 @@ struct MealReviewView: View {
     private var selectedPercent: Double? { Double(customPercent.replacingOccurrences(of: ",", with: ".")) }
 
     private func makePlan(full: Double) -> RiceMealPlan? {
-        guard let carbs, let percent = selectedPercent, let nowPercent = Double(carbsNowText), let delay = Double(delayText) else { return nil }
+        guard let carbs, let percent = selectedPercent,
+              let split = selectedCarbSplit else { return nil }
         let override: Double?
         if let text = bolusOverrideText {
             guard let value = Double(text.replacingOccurrences(of: ",", with: ".")) else { return nil }
             override = value
         } else { override = nil }
-        return RiceMealPlan(carbs: carbs, fullRecommendation: full, upfrontPercent: percent, confirmedAt: Date(), carbsNowPercent: nowPercent, delayMinutes: delay, upfrontInsulinOverride: override, preset: preset)
+        return RiceMealPlan(carbs: carbs, fullRecommendation: full, upfrontPercent: percent, confirmedAt: Date(), carbsNowPercent: split.percent, delayMinutes: split.delay, upfrontInsulinOverride: override, preset: preset)
+    }
+
+    private var selectedCarbSplit: (percent: Double, delay: Double)? {
+        guard let percent = selectedPercent, let now = Double(carbsNowText), let delay = Double(delayText) else { return nil }
+        return linkedPercentages ? (percent, preset.linkedCarbDelay(percent: percent, selectedDelay: delay)) : (now, delay)
+    }
+
+    private func synchronizeCarbSplit() {
+        guard linkedPercentages, let percent = selectedPercent, percent.isFinite else { return }
+        carbsNowText = customPercent
+        delayText = String(format: "%g", preset.linkedCarbDelay(percent: percent, selectedDelay: Double(delayText) ?? 0))
     }
 
     @ViewBuilder
@@ -189,13 +206,19 @@ struct MealReviewView: View {
                 carbsNowText = String(Int(value.carbsNowPercent))
                 delayText = String(Int(value.delayMinutes))
                 customPercent = String(Int(value.insulinPercent))
+                linkedPercentages = value != .custom
                 bolusOverrideText = nil
             }
-            DisclosureGroup("Change carb split or insulin percentage") {
-                HStack { Text("Carbs announced now (%)"); TextField("0–100", text: $carbsNowText).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
+            DisclosureGroup("Custom percentages and timing") {
+                Toggle("Link insulin % and carbs-now %", isOn: $linkedPercentages)
+                    .accessibilityIdentifier("advisor-link-percentages")
+                    .onChange(of: linkedPercentages) { _, _ in synchronizeCarbSplit() }
+                if !linkedPercentages {
+                    HStack { Text("Carbs announced now (%)"); TextField("0–100", text: $carbsNowText).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
+                }
                 HStack { Text("Remaining carbs after (min)"); TextField("Minutes", text: $delayText).keyboardType(.numberPad).multilineTextAlignment(.trailing) }
                 HStack { Text("Upfront insulin (%)"); TextField("0–100", text: $customPercent).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
-                Text("Carb split and insulin percentage are separate. No later insulin bolus is scheduled.").font(.footnote)
+                Text("Linked by default: the same percentage of insulin and carbs is selected now. Turn linking off to customize them separately. No later insulin bolus is scheduled.").font(.footnote)
             }
         }
     }
@@ -240,8 +263,8 @@ struct MealReviewView: View {
     private func selectionSection(full: Double, comparisonOnly: Bool) -> some View {
         Group {
             if let carbs, let percent = selectedPercent,
-               let nowPercent = Double(carbsNowText), let delay = Double(delayText),
-               let suggestion = RiceMealPlan(carbs: carbs, fullRecommendation: full, upfrontPercent: percent, confirmedAt: Date(), carbsNowPercent: nowPercent, delayMinutes: delay, preset: preset)
+               let split = selectedCarbSplit,
+               let suggestion = RiceMealPlan(carbs: carbs, fullRecommendation: full, upfrontPercent: percent, confirmedAt: Date(), carbsNowPercent: split.percent, delayMinutes: split.delay, preset: preset)
             {
                 let plan = makePlan(full: full) ?? suggestion
                 row(comparisonOnly ? "Suggested comparison" : "Suggested upfront (\(customPercent)%)", units(suggestion.suggestedUpfrontInsulin))
@@ -256,7 +279,7 @@ struct MealReviewView: View {
                         .accessibilityIdentifier("advisor-edit-bolus")
                 }
                 HStack {
-                    Text("Upfront insulin")
+                    Text(linkedPercentages ? "Insulin & carbs now" : "Upfront insulin")
                     Spacer()
                     Button { adjustUpfrontPercent(by: -5) } label: {
                         Image(systemName: "minus.circle.fill").font(.title2).frame(width: 44, height: 44)
@@ -273,10 +296,10 @@ struct MealReviewView: View {
                     .accessibilityLabel("Increase upfront insulin by 5 percent")
                     .accessibilityIdentifier("advisor-percent-increase")
                 }
-                Text("5% steps · carb split stays unchanged").font(.caption).foregroundStyle(.secondary)
+                Text(linkedPercentages ? "5% steps · insulin and carbs-now change together" : "5% steps · custom carb split stays unchanged").font(.caption).foregroundStyle(.secondary)
                 if bolusOverrideText != nil {
                     Button("Use suggested insulin") { bolusOverrideText = nil; bolusFocused = false }
-                    Text("Your edited units are copied as entered; the insulin percentage is not applied again.").font(.caption)
+                    Text("Your edited units are copied as entered; the insulin percentage is not applied again. Carbs keep the displayed split.").font(.caption)
                 }
                 if makePlan(full: full) == nil {
                     warning("Enter a valid insulin amount in 0.05 U steps.")
@@ -288,7 +311,7 @@ struct MealReviewView: View {
                 let maximumCarbs = min(localCarbLimit.value.doubleValue(for: .gram()), snapshot.value?.smartMeal.map { NSDecimalNumber(decimal: $0.configuration.maxCarbs).doubleValue } ?? 1000)
                 if carbs > maximumCarbs { warning("The current meal-carb limit is \(Int(maximumCarbs)) g.") }
                 row("Carbs now", "\(plan.immediateCarbs) g")
-                row("Carbs later", plan.delayedCarbs > 0 ? "\(plan.delayedCarbs) g at +\(delayText) min" : "None")
+                row("Carbs later", plan.delayedCarbs > 0 ? "\(plan.delayedCarbs) g at +\(String(format: "%g", plan.delayMinutes)) min" : "None")
                 if plan.delayedCarbs > 0 && !SmartMealDelivery.available(snapshot: snapshot.value, settings: settings.value, bundleID: Storage.shared.bundleId.value, now: Date()) {
                     warning(RiceMealPlan.sendingBlocker)
                 }

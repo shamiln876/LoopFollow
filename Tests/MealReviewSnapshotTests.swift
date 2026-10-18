@@ -78,4 +78,47 @@ struct MealReviewSnapshotTests {
         #expect(snapshot().reviewEquivalent(carbs: 10, glucose: 166, glucoseDate: now, delta: nil, trend: nil, now: now) == 0.5)
         #expect(MealReviewSnapshot.trendNotice(delta: nil, trend: "Flat") == nil)
     }
+
+    @Test func receiverDecimalRoundTripPreservesConfigurationAndReceiptIdentity() throws {
+        let configuration = SmartMealConfiguration(percentage: 90, maxIOB: 10, maxCOB: 125, maxBolus: 9,
+                                                   maxCarbs: 150, maxFat: 250, maxProtein: 250, bolusIncrement: 0.05)
+        let request = SmartMealRequest(id: UUID(), confirmedAt: now.timeIntervalSince1970 + 0.123456,
+                                       calculationAt: now.timeIntervalSince1970, configurationID: configuration.identifier,
+                                       immediateCarbs: 60, delayedCarbs: 20, delaySeconds: 1800,
+                                       fullRecommendation: 5.8, upfrontPercent: 75, bolusAmount: 0.65,
+                                       includeFatProtein: false, protein: 0, fat: 0)
+        let status = SmartMealReceiverStatus(protocolVersion: 1, generatedAt: now.timeIntervalSince1970 + 0.3,
+                                             calculationAt: now.timeIntervalSince1970, bundleIdentifier: "test.trio", enabled: true,
+                                             configuration: configuration,
+                                             receipts: [.init(request: request, phase: .accepted, updatedAt: now.timeIntervalSince1970 + 0.234567, message: "test")])
+        let wire = try JSONSerialization.jsonObject(with: JSONEncoder().encode(status))
+        let record: [String: AnyObject] = ["version": "1.0.2" as AnyObject,
+                                           "suggested": ["deliverAt": "2023-11-14T22:13:20.000Z", "CR": 10] as AnyObject,
+                                           "smartMeal": wire as AnyObject]
+        let snapshot = try #require(MealReviewSnapshot.parse(record, profileRatio: nil))
+        let parsed = try #require(snapshot.smartMeal)
+        #expect(parsed == status)
+        #expect(parsed.configuration.bolusIncrement == Decimal(string: "0.05")!)
+        #expect(parsed.configuration.identifier == configuration.identifier)
+        #expect(parsed.receipts.first?.request.digest == request.digest)
+        let live = try #require(SmartMealDelivery.liveSettings(snapshot: snapshot, source: "https://example.invalid", bundleID: "test.trio", now: now.addingTimeInterval(1)))
+        #expect(live.receiverConfigurationID == configuration.identifier)
+        #expect(SmartMealDelivery.liveSettings(snapshot: snapshot, source: "https://example.invalid", bundleID: "other.trio", now: now.addingTimeInterval(1)) == nil)
+        #expect(SmartMealDelivery.liveSettings(snapshot: snapshot, source: "https://example.invalid", bundleID: "test.trio", now: now.addingTimeInterval(601)) == nil)
+    }
+
+    @Test func receiverNormalizationDoesNotRoundAnInvalidPumpStepIntoValidity() throws {
+        for increment in [NSNumber(value: 0.051), NSDecimalNumber(string: "0.050000000000000003")] {
+            let wire: [String: Any] = ["protocolVersion": 1, "generatedAt": now.timeIntervalSince1970,
+                                       "calculationAt": now.timeIntervalSince1970, "bundleIdentifier": "test.trio", "enabled": true,
+                                       "receipts": [], "configuration": ["percentage": 90, "maxIOB": 10, "maxCOB": 125, "maxBolus": 9,
+                                                                         "maxCarbs": 150, "maxFat": 250, "maxProtein": 250, "bolusIncrement": increment]]
+            let record: [String: AnyObject] = ["version": "1.0.2" as AnyObject,
+                                               "suggested": ["deliverAt": "2023-11-14T22:13:20.000Z", "CR": 10] as AnyObject,
+                                               "smartMeal": wire as AnyObject]
+            let snapshot = try #require(MealReviewSnapshot.parse(record, profileRatio: nil))
+            #expect(snapshot.smartMeal?.configuration.valid != true)
+            #expect(SmartMealDelivery.liveSettings(snapshot: snapshot, source: "https://example.invalid", bundleID: "test.trio", now: now) == nil)
+        }
+    }
 }

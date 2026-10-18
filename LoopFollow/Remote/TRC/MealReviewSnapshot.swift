@@ -121,7 +121,7 @@ struct MealReviewSnapshot: Codable, Equatable {
         snapshot.calculationIOB = number(calculation["IOB"])
         snapshot.nativeRecommendation = number(record["recommendedBolus"]).flatMap { $0 >= 0 ? $0 : nil }
         snapshot.trioVersion = record["version"] as? String
-        if let status = record["smartMeal"], let data = try? JSONSerialization.data(withJSONObject: status) {
+        if let status = record["smartMeal"], let data = try? JSONSerialization.data(withJSONObject: Self.exactReceiverJSON(status)) {
             snapshot.smartMeal = try? JSONDecoder().decode(SmartMealReceiverStatus.self, from: data)
         }
         if let factor { snapshot.uploadUnitSource = factor == 1 ? "Trio mg/dL fields" : "Trio mmol/L fields" }
@@ -135,6 +135,17 @@ struct MealReviewSnapshot: Codable, Equatable {
             }
         }
         return snapshot
+    }
+
+    /// Re-encoding binary NSNumbers can turn 0.05 into 0.050000000000000003.
+    /// Keep decimal text exact for configuration IDs and echoed request digests.
+    private static func exactReceiverJSON(_ value: Any) -> Any {
+        if let dictionary = value as? [String: Any] { return dictionary.mapValues(exactReceiverJSON) }
+        if let array = value as? [Any] { return array.map(Self.exactReceiverJSON) }
+        if let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() {
+            return NSDecimalNumber(string: number.stringValue, locale: Locale(identifier: "en_US_POSIX"))
+        }
+        return value
     }
 
     /// Educational carb/ratio arithmetic only. Never a deliverable bolus recommendation.

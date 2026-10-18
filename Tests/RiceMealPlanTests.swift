@@ -94,6 +94,28 @@ struct RiceMealPlanTests {
         }
     }
 
+    @Test func linkedPercentagesStageRemainingCarbsWithoutAnotherBolus() throws {
+        let now = Date()
+        for preset in SmartMealPreset.allCases {
+            for percent in stride(from: 0.0, through: 100.0, by: 5.0) {
+                let delay = preset.linkedCarbDelay(percent: percent, selectedDelay: preset.delayMinutes)
+                let plan = try #require(RiceMealPlan(carbs: 80, fullRecommendation: 5.8, upfrontPercent: percent,
+                                                     confirmedAt: now, carbsNowPercent: percent, delayMinutes: delay, preset: preset))
+                #expect(plan.immediateCarbs == Int(80 * percent / 100))
+                #expect(plan.immediateCarbs + plan.delayedCarbs == 80)
+                #expect(plan.fullRecommendation == 5.8)
+                #expect(plan.upfrontInsulin <= 5.8 * percent / 100 + 0.000001)
+                #expect(plan.delayedInsulin == 0)
+                #expect(delay == (percent == 100 ? 0 : preset == .pizza ? 60 : 30))
+            }
+        }
+        #expect(SmartMealPreset.rice.linkedCarbDelay(percent: 75, selectedDelay: 45) == 45)
+        #expect(SmartMealPreset.fruit.linkedCarbDelay(percent: 95, selectedDelay: -1) == -1)
+        let manual = try #require(RiceMealPlan(carbs: 80, fullRecommendation: 5.8, upfrontPercent: 75,
+                                               confirmedAt: now, carbsNowPercent: 75, delayMinutes: 30, upfrontInsulinOverride: 0.65))
+        #expect(manual.upfrontInsulin == 0.65 && manual.immediateCarbs == 60 && manual.delayedCarbs == 20)
+    }
+
     @Test func draftFreshnessAndHistoricalGuards() {
         let now = Date()
         let source = "https://example.invalid"
