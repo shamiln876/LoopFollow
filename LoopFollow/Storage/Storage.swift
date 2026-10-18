@@ -207,6 +207,8 @@ class Storage {
     var hasConfiguredUnits = StorageValue<Bool>(key: "hasConfiguredUnits", defaultValue: false)
     var hasCompletedOnboarding = StorageValue<Bool>(key: "hasCompletedOnboarding", defaultValue: false)
 
+    var compactInfoLayoutApplied = StorageValue<Bool>(key: "compactInfoLayoutApplied", defaultValue: false)
+
     var infoDisplayItems = StorageValue<[InfoDisplayItem]>(
         key: "infoDisplayItems",
         defaultValue: InfoType.allCases.map {

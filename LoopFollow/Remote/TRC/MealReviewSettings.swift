@@ -40,6 +40,18 @@ struct MealReviewSettings: Codable, Equatable {
             && historicalReference.map { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.count <= 200 } != false
     }
 
+    /// Reopening unchanged settings does not need another acknowledgement.
+    /// Return the original record so this cannot renew its age or lose its receiver binding.
+    func retainedIfUnchanged(percentage: Double, maxIOB: Double, maxCOB: Double, maxBolus: Double,
+                             source: String, version: String?, now: Date) -> MealReviewSettings?
+    {
+        guard !isHistorical, matches(source: source, version: version, now: now),
+              (0 ... 86400).contains(now.timeIntervalSince(checkedAt)),
+              self.percentage == percentage, self.maxIOB == maxIOB,
+              self.maxCOB == maxCOB, self.maxBolus == maxBolus else { return nil }
+        return self
+    }
+
     func matches(source: String, version: String?, now: Date) -> Bool {
         numbersValid && !source.isEmpty && sourceFingerprint == Self.fingerprint(source)
             && trioVersion == "1.0.2" && version == trioVersion && checkedAt <= now.addingTimeInterval(60)

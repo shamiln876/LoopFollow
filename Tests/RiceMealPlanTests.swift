@@ -101,6 +101,24 @@ struct RiceMealPlanTests {
         }
     }
 
+    @Test func unchangedSettingsKeepVerificationWithoutRenewingIt() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        var saved = settings(now.addingTimeInterval(-60))
+        saved.receiverConfigurationID = "paired-receiver"
+        func retained(_ s: MealReviewSettings, percentage: Double? = nil, date: Date = now, connection: String = source) -> MealReviewSettings? {
+            s.retainedIfUnchanged(percentage: percentage ?? s.percentage, maxIOB: s.maxIOB,
+                                  maxCOB: s.maxCOB, maxBolus: s.maxBolus,
+                                  source: connection, version: "1.0.2", now: date)
+        }
+        #expect(retained(saved) == saved)
+        #expect(retained(saved)?.checkedAt == now.addingTimeInterval(-60))
+        #expect(retained(saved)?.receiverConfigurationID == "paired-receiver")
+        #expect(retained(saved, percentage: saved.percentage + 1) == nil)
+        #expect(retained(saved, date: now.addingTimeInterval(86400)) == nil)
+        #expect(retained(saved, connection: "another server") == nil)
+        #expect(retained(settings(now, historical: "Unverified reference")) == nil)
+    }
+
     @Test func pendingAttemptSurvivesRecreationAndRequiresReconciliation() {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

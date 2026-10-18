@@ -1,6 +1,6 @@
 # Smart Meal Advisor
 
-The advisor is built into regular LoopFollow. Build 16 defaults to Full Meal Bolus (100%), places Rice · 75/25 split next, and removes the IOB/COB duration captions from the corner information table. The upfront insulin remains editable before its exact transfer into Meal. Split carbs require the matching, versioned Trio receiver. Building source does not install either app.
+The advisor is built into regular LoopFollow. Build 17 defaults to Full Meal Bolus (100%), places Rice · 75/25 split next, and removes the IOB/COB duration captions from the corner information table. Its text/rows are smaller and SAGE/CAGE are hidden once; they can be enabled again in Information Display settings. The upfront insulin remains editable before its exact transfer into Meal. Reopening unchanged, still-current verified settings needs no repeated checkbox and does not refresh their verification time. Split carbs require the matching, versioned Trio receiver. Building source does not install either app.
 
 ## Daily workflow
 
@@ -62,7 +62,7 @@ Verified during this iteration: 40 LoopFollow calculation/freshness/draft/reques
 
 ## Installation
 
-Update the existing apps in place with their original bundle IDs, signing team and App Groups. Back up settings/Documents and retain the prior signed build first; do not uninstall. Install regular LoopFollow build 16 on the caregiver phone and the matching Trio receiver update on the pump-controller phone. Verify the actual installed versions and preserved configuration after each update. No test should send a hypothetical meal or insulin to the live controller.
+Update the existing apps in place with their original bundle IDs, signing team and App Groups. Back up settings/Documents and retain the prior signed build first; do not uninstall. Install regular LoopFollow build 17 on the caregiver phone and the matching Trio receiver update on the pump-controller phone. Verify the actual installed versions and preserved configuration after each update. No test should send a hypothetical meal or insulin to the live controller.
 
 Actual bolus/SMB/peak/nadir outcome logging remains deferred. No live treatments, authentication or pump-setting changes were exercised in development. Physical-device behavior and clinical efficacy are not established by simulator tests.
 

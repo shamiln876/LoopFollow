@@ -20,7 +20,16 @@ struct MealReviewSettingsView: View {
     }
 
     private func number(_ text: String) -> Double? { Double(text.replacingOccurrences(of: ",", with: ".")) }
+    private var retainedVerification: MealReviewSettings? {
+        guard let percentage = number(percentage), let iob = number(maxIOB),
+              let cob = number(maxCOB), let bolus = number(maxBolus) else { return nil }
+        return saved.value?.retainedIfUnchanged(percentage: percentage, maxIOB: iob, maxCOB: cob,
+                                                maxBolus: bolus, source: source.value,
+                                                version: snapshot.value?.trioVersion, now: Date())
+    }
+
     private var proposed: MealReviewSettings? {
+        if let retainedVerification { return retainedVerification }
         guard !source.value.isEmpty, snapshot.value?.trioVersion == "1.0.2",
               let percentage = number(percentage), let iob = number(maxIOB), let cob = number(maxCOB), let bolus = number(maxBolus) else { return nil }
         let settings = MealReviewSettings(percentage: percentage, maxIOB: iob, maxCOB: cob, maxBolus: bolus,
@@ -38,8 +47,12 @@ struct MealReviewSettingsView: View {
                     numberRow("Trio Max IOB (U)", $maxIOB)
                     numberRow("Trio Max COB (g)", $maxCOB)
                     numberRow("Trio Maximum Bolus (U)", $maxBolus)
-                    Toggle("I checked these values in current Trio on Omnipod DASH", isOn: $checked)
-                    if !checked {
+                    if retainedVerification != nil {
+                        Label("Unchanged verified settings · no extra check needed", systemImage: "checkmark.circle")
+                    } else {
+                        Toggle("I checked these values in current Trio on Omnipod DASH", isOn: $checked)
+                    }
+                    if !checked && retainedVerification == nil {
                         Text("The updated Trio receiver supplies current settings automatically. With an older Trio build, check these four values in Trio before enabling transfer. Saving without checking keeps comparison only.").foregroundStyle(.orange)
                     }
                 }
@@ -49,7 +62,7 @@ struct MealReviewSettingsView: View {
                     if snapshot.value?.trioVersion != "1.0.2" { Text("Waiting for the supported Trio version's live upload.").foregroundStyle(.orange) }
                 }
                 Section {
-                    Button(checked ? "Save verified settings" : "Save for comparison only") {
+                    Button(checked || retainedVerification != nil ? "Done" : "Save for comparison only") {
                         guard let proposed else { return }
                         saved.value = proposed
                         dismiss()
