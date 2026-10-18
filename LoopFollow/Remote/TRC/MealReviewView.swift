@@ -244,6 +244,17 @@ struct MealReviewView: View {
                let suggestion = RiceMealPlan(carbs: carbs, fullRecommendation: full, upfrontPercent: percent, confirmedAt: Date(), carbsNowPercent: nowPercent, delayMinutes: delay, preset: preset)
             {
                 let plan = makePlan(full: full) ?? suggestion
+                row(comparisonOnly ? "Suggested comparison" : "Suggested upfront (\(customPercent)%)", units(suggestion.suggestedUpfrontInsulin))
+                HStack {
+                    Text("Your upfront bolus (U)")
+                    TextField("Units", text: Binding(get: {
+                        bolusOverrideText ?? String(format: "%.2f", suggestion.upfrontInsulin)
+                    }, set: { bolusOverrideText = $0 }))
+                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                        .focused($bolusFocused)
+                        .accessibilityLabel("Your upfront bolus in units")
+                        .accessibilityIdentifier("advisor-edit-bolus")
+                }
                 HStack {
                     Text("Upfront insulin")
                     Spacer()
@@ -263,17 +274,6 @@ struct MealReviewView: View {
                     .accessibilityIdentifier("advisor-percent-increase")
                 }
                 Text("5% steps · carb split stays unchanged").font(.caption).foregroundStyle(.secondary)
-                row(comparisonOnly ? "Suggested comparison" : "Suggested upfront (\(customPercent)%)", units(suggestion.suggestedUpfrontInsulin))
-                HStack {
-                    Text("Your upfront bolus (U)")
-                    TextField("Units", text: Binding(get: {
-                        bolusOverrideText ?? String(format: "%.2f", suggestion.upfrontInsulin)
-                    }, set: { bolusOverrideText = $0 }))
-                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                        .focused($bolusFocused)
-                        .accessibilityLabel("Your upfront bolus in units")
-                        .accessibilityIdentifier("advisor-edit-bolus")
-                }
                 if bolusOverrideText != nil {
                     Button("Use suggested insulin") { bolusOverrideText = nil; bolusFocused = false }
                     Text("Your edited units are copied as entered; the insulin percentage is not applied again.").font(.caption)
