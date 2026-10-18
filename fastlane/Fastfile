@@ -48,7 +48,7 @@ platform :ios do
   desc "Build Loop Follow"
   lane :build_LoopFollow do
     setup_ci if ENV['CI']
-    
+
     update_project_team(
       path: "#{GITHUB_WORKSPACE}/LoopFollow.xcodeproj",
       teamid: "#{TEAMID}"
@@ -70,21 +70,58 @@ platform :ios do
     increment_build_number(
       xcodeproj: "#{GITHUB_WORKSPACE}/LoopFollow.xcodeproj",
       build_number: current_build_number
-    )      
-    
-    match(
-      type: "appstore",
-      readonly: ENV["MATCH_READONLY"] == "true",
-      git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
-      app_identifier: [
-        APP_IDENTIFIER,
-        LA_IDENTIFIER
-      ]
     )
 
-    mapping = Actions.lane_context[
-      SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING
-    ]
+    if ENV["USE_EXISTING_TRIO_CERTIFICATE"] == "true"
+      UI.user_error!("Unexpected family app identity") unless APP_IDENTIFIER == "com.D3GG62L9X8.LoopFollow"
+      # Import the already-valid distribution certificate/private key without changing Match.
+      match(
+        type: "appstore", readonly: true,
+        git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
+        app_identifier: ["org.nightscout.D3GG62L9X8.trio"]
+      )
+      require "open3"
+      require "digest"
+      require "base64"
+      require "tmpdir"
+      identities, status = Open3.capture2("security", "find-identity", "-v", "-p", "codesigning")
+      UI.user_error!("Cannot verify existing signing identity") unless status.success?
+      certificates = Spaceship::ConnectAPI::Certificate.all(filter: {certificateType: "IOS_DISTRIBUTION,DISTRIBUTION"})
+      installed = certificates.select do |certificate|
+        fingerprint = Digest::SHA1.hexdigest(Base64.decode64(certificate.certificate_content)).upcase
+        identities.include?(fingerprint)
+      end
+      UI.user_error!("Expected one existing valid distribution identity") unless installed.length == 1
+      mapping = {}
+      Dir.mktmpdir("loopfollow-profiles-") do |directory|
+        [APP_IDENTIFIER, LA_IDENTIFIER].each do |identifier|
+          # This action handles profiles only; it cannot create or revoke a certificate.
+          get_provisioning_profile(
+            api_key: api_key, app_identifier: identifier,
+            cert_id: installed.first.id,
+            provisioning_name: "SmartMeal AppStore #{identifier}",
+            ignore_profiles_with_different_name: true,
+            fail_on_name_taken: true, force: false,
+            output_path: directory, filename: "#{identifier}.mobileprovision"
+          )
+          mapping[identifier] = Actions.lane_context[SharedValues::SIGH_NAME]
+        end
+      end
+    else
+      match(
+        type: "appstore",
+        readonly: ENV["MATCH_READONLY"] == "true",
+        git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
+        app_identifier: [
+          APP_IDENTIFIER,
+          LA_IDENTIFIER
+        ]
+      )
+
+      mapping = Actions.lane_context[
+        SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING
+      ]
+    end
 
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/LoopFollow.xcodeproj",
@@ -128,7 +165,7 @@ platform :ios do
       issuer_id: "#{FASTLANE_ISSUER_ID}",
       key_content: "#{FASTLANE_KEY}"
     )
-    
+
     upload_to_testflight(
       api_key: api_key,
       skip_submission: false,
@@ -142,7 +179,7 @@ platform :ios do
   lane :identifiers do
     setup_ci if ENV['CI']
     ENV["MATCH_READONLY"] = false.to_s
-    
+
     app_store_connect_api_key(
       key_id: "#{FASTLANE_KEY_ID}",
       issuer_id: "#{FASTLANE_ISSUER_ID}",
@@ -176,13 +213,13 @@ platform :ios do
   lane :certs do
     setup_ci if ENV['CI']
     ENV["MATCH_READONLY"] = false.to_s
-    
+
     app_store_connect_api_key(
       key_id: "#{FASTLANE_KEY_ID}",
       issuer_id: "#{FASTLANE_ISSUER_ID}",
       key_content: "#{FASTLANE_KEY}"
     )
-    
+
     match(
       type: "appstore",
       force: false,
@@ -217,13 +254,13 @@ platform :ios do
   lane :nuke_certs do
     setup_ci if ENV['CI']
     ENV["MATCH_READONLY"] = false.to_s
-    
+
     app_store_connect_api_key(
       key_id: "#{FASTLANE_KEY_ID}",
       issuer_id: "#{FASTLANE_ISSUER_ID}",
       key_content: "#{FASTLANE_KEY}"
     )
-    
+
     match_nuke(
       type: "appstore",
       team_id: "#{TEAMID}",
@@ -231,28 +268,28 @@ platform :ios do
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}")
     )
   end
-  
+
   desc "Check Certificates and Trigger Workflow for Expired or Missing Certificates"
   lane :check_and_renew_certificates do
     setup_ci if ENV['CI']
     ENV["MATCH_READONLY"] = false.to_s
-  
+
     # Authenticate using App Store Connect API Key
     api_key = app_store_connect_api_key(
       key_id: ENV["FASTLANE_KEY_ID"],
       issuer_id: ENV["FASTLANE_ISSUER_ID"],
       key_content: ENV["FASTLANE_KEY"] # Ensure valid key content
     )
-  
+
     # Initialize flag to track if renewal of certificates is needed
     new_certificate_needed = false
-  
+
     # Fetch all certificates
     certificates = Spaceship::ConnectAPI::Certificate.all
-  
+
     # Filter for Distribution Certificates
     distribution_certs = certificates.select { |cert| cert.certificate_type == "DISTRIBUTION" }
-  
+
     # Handle case where no distribution certificates are found
     if distribution_certs.empty?
       puts "No Distribution certificates found! Triggering action to create certificate."
@@ -261,9 +298,9 @@ platform :ios do
       # Check for expiration
       distribution_certs.each do |cert|
         expiration_date = Time.parse(cert.expiration_date)
-  
+
         puts "Current Distribution Certificate: #{cert.id}, Expiration date: #{expiration_date}"
-  
+
         if expiration_date < Time.now
           puts "Distribution Certificate #{cert.id} is expired! Triggering action to renew certificate."
           new_certificate_needed = true
@@ -272,11 +309,11 @@ platform :ios do
         end
       end
     end
-  
+
     # Write result to new_certificate_needed.txt
     file_path = File.expand_path('new_certificate_needed.txt')
-    File.write(file_path, new_certificate_needed ? 'true' : 'false')  
-  
+    File.write(file_path, new_certificate_needed ? 'true' : 'false')
+
     # Log the absolute path and contents of the new_certificate_needed.txt file
     puts ""
     puts "Absolute path of new_certificate_needed.txt: #{file_path}"
