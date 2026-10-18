@@ -34,7 +34,7 @@ enum InfoType: Int, CaseIterable, Codable {
 
     var defaultVisible: Bool {
         switch self {
-        case .iob, .cob, .basal, .override, .battery, .pump, .sage, .cage, .recBolus, .minMax, .carbsToday:
+        case .iob, .cob, .basal, .override, .battery, .pump, .recBolus, .minMax, .carbsToday:
             return true
         default:
             return false

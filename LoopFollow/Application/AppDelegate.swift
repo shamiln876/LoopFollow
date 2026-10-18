@@ -9,6 +9,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     let notificationCenter = UNUserNotificationCenter.current()
 
     func application(_: UIApplication, didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        #if DEBUG && targetEnvironment(simulator)
+            if SmartMealUITestFixture.enabled {
+                SmartMealUITestFixture.configure()
+                return true // Synthetic UI checks never start networking, alarms or telemetry.
+            }
+        #endif
         LogManager.shared.log(category: .general, message: "App started")
         LogManager.shared.cleanupOldLogs()
 
