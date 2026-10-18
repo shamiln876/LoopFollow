@@ -103,12 +103,18 @@ struct RiceMealPlanTests {
 
     @Test func unchangedSettingsKeepVerificationWithoutRenewingIt() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let source = "https://example.invalid"
+        func settings(_ date: Date, historical: String? = nil) -> MealReviewSettings {
+            .init(percentage: 90, maxIOB: 10, maxCOB: 120, maxBolus: 10,
+                  sourceFingerprint: MealReviewSettings.fingerprint(source), trioVersion: "1.0.2",
+                  checkedAt: date, historicalReference: historical)
+        }
         var saved = settings(now.addingTimeInterval(-60))
         saved.receiverConfigurationID = "paired-receiver"
-        func retained(_ s: MealReviewSettings, percentage: Double? = nil, date: Date = now, connection: String = source) -> MealReviewSettings? {
+        func retained(_ s: MealReviewSettings, percentage: Double? = nil, date: Date? = nil, connection: String? = nil) -> MealReviewSettings? {
             s.retainedIfUnchanged(percentage: percentage ?? s.percentage, maxIOB: s.maxIOB,
                                   maxCOB: s.maxCOB, maxBolus: s.maxBolus,
-                                  source: connection, version: "1.0.2", now: date)
+                                  source: connection ?? source, version: "1.0.2", now: date ?? now)
         }
         #expect(retained(saved) == saved)
         #expect(retained(saved)?.checkedAt == now.addingTimeInterval(-60))
