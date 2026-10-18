@@ -12,8 +12,13 @@
         private static var configured = false
         @State private var mealPresented = false
         @State private var percentageAdvisorPresented = false
-        @State private var percentageMealPresented = false
+        @State private var percentageMeal: PercentageMealRoute?
         @State private var percentageDraft: SmartMealDraft?
+
+        private struct PercentageMealRoute: Identifiable {
+            let id = UUID()
+            let draft: SmartMealDraft
+        }
 
         @MainActor static func configure() {
             guard !configured else { return }
@@ -65,12 +70,12 @@
             .padding()
             .sheet(isPresented: $mealPresented) { MealView() }
             .sheet(isPresented: $percentageAdvisorPresented, onDismiss: {
-                if percentageDraft != nil { percentageMealPresented = true }
+                if let percentageDraft { percentageMeal = PercentageMealRoute(draft: percentageDraft) }
             }) {
                 MealReviewView(initialCarbs: 80) { percentageDraft = $0 }
             }
-            .sheet(isPresented: $percentageMealPresented) {
-                if let percentageDraft { MealView(initialAdvisorDraft: percentageDraft) }
+            .sheet(item: $percentageMeal) { route in
+                MealView(initialAdvisorDraft: route.draft)
             }
         }
     }
