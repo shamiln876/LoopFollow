@@ -25,7 +25,7 @@ jobs:
       USE_EXISTING_TRIO_CERTIFICATE: 'true'
       MATCH_READONLY: 'true'
       NATIVE_PLATE_SCANNER_REQUIRED: 'true'
-      MINIMUM_BUILD_NUMBER: '23'
+      MINIMUM_BUILD_NUMBER: '24'
       WAIT_FOR_PROCESSING: 'true'
     steps:
       - name: Select released Xcode 27 SDK

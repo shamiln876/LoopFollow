@@ -18,9 +18,10 @@ enum MealReviewFullCalculation {
         let rounded: Double
     }
 
-    static func calculate(newCarbs: Double, cob: Double, ratio: Double, glucose: Double, target: Double, isf: Double, iob: Double, delta: Double, settings: MealReviewSettings) -> Result? {
+    static func calculate(newCarbs: Double, cob: Double, ratio: Double, glucose: Double, target: Double, isf: Double, iob: Double, delta: Double, settings: MealReviewSettings, minimumPrediction: Double? = nil) -> Result? {
         guard settings.numbersValid,
               [newCarbs, cob, ratio, glucose, target, isf, iob, delta].allSatisfy(\.isFinite),
+              minimumPrediction.map(\.isFinite) != false,
               newCarbs >= 0, (0 ... 32767).contains(cob), ratio > 0, glucose > 0, target > 0, isf > 0 else { return nil }
         // Decimal arithmetic follows Trio's calculator. Omnipod rounds down by
         // choosing the last supported n/20 volume <= the requested Double.
@@ -40,7 +41,8 @@ enum MealReviewFullCalculation {
         let bolusLimited = min(max(factored, 0), maxBolus)
         let iobLimited = max(0, min(bolusLimited, maxIOB - active))
         let limited = value(iobLimited)
-        let rounded = (1 ... 600).map { Double($0) / 20 }.last { $0 <= limited } ?? 0
+        let nativeVeryLow = glucose < 54 || minimumPrediction.map { $0 < 54 } == true
+        let rounded = nativeVeryLow ? 0 : (1 ... 600).map { Double($0) / 20 }.last { $0 <= limited } ?? 0
         let fields = [wholeCarbs, carbUnits, correction, trend, credit, balance, factored, bolusLimited, iobLimited].map(value)
         guard fields.allSatisfy(\.isFinite) else { return nil }
         return Result(cappedCarbs: fields[0], carbUnits: fields[1], correctionUnits: fields[2], trendUnits: fields[3], iobCreditUnits: fields[4], balance: fields[5], afterPercentage: fields[6], afterBolusLimit: fields[7], afterIOBLimit: fields[8], rounded: rounded)
@@ -57,8 +59,8 @@ enum MealReviewFullCalculation {
         return reasons
     }
 
-    static func review(newCarbs: Double, settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, source: String, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, now: Date) -> Result? {
-        evaluate(newCarbs: newCarbs, settings: settings, snapshot: snapshot, source: source, samples: samples, newestTreatment: newestTreatment, now: now, includeSafetyHolds: true)
+    static func review(newCarbs: Double, settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, source: String, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, now: Date, allowLowPredictionReview: Bool = false) -> Result? {
+        evaluate(newCarbs: newCarbs, settings: settings, snapshot: snapshot, source: source, samples: samples, newestTreatment: newestTreatment, now: now, includeSafetyHolds: true, allowLowPredictionReview: allowLowPredictionReview)
     }
 
     /// Read-only arithmetic can remain visible during a low-forecast hold.
@@ -67,13 +69,13 @@ enum MealReviewFullCalculation {
         evaluate(newCarbs: newCarbs, settings: settings, snapshot: snapshot, source: source, samples: samples, newestTreatment: newestTreatment, now: now, includeSafetyHolds: false)
     }
 
-    private static func evaluate(newCarbs: Double, settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, source: String, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, now: Date, includeSafetyHolds: Bool) -> Result? {
+    private static func evaluate(newCarbs: Double, settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, source: String, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, now: Date, includeSafetyHolds: Bool, allowLowPredictionReview: Bool = false) -> Result? {
         guard reasons(settings: settings, snapshot: snapshot, source: source, now: now).isEmpty,
-              MealReviewCalculation.reasons(snapshot: snapshot, samples: samples, newestTreatment: newestTreatment, now: now, includeSafetyHolds: includeSafetyHolds).isEmpty,
+              MealReviewCalculation.reasons(snapshot: snapshot, samples: samples, newestTreatment: newestTreatment, now: now, includeSafetyHolds: includeSafetyHolds, allowLowPredictionReview: allowLowPredictionReview).isEmpty,
               let settings, let s = snapshot, let cob = s.cob, let ratio = s.carbRatio,
               let target = s.targetMgdl, let isf = s.effectiveISF, let iob = s.iob,
               let bg = MealReviewCalculation.latestGlucose(samples: samples, now: now)?.mgdl,
               let delta = MealReviewCalculation.recentDelta(samples: samples, now: now) else { return nil }
-        return calculate(newCarbs: newCarbs, cob: cob, ratio: ratio, glucose: bg, target: target, isf: isf, iob: iob, delta: delta, settings: settings)
+        return calculate(newCarbs: newCarbs, cob: cob, ratio: ratio, glucose: bg, target: target, isf: isf, iob: iob, delta: delta, settings: settings, minimumPrediction: s.minPredMgdl)
     }
 }

@@ -16,7 +16,7 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
         raise SystemExit('Unexpected LoopFollow bundle identity')
     if not info.get('DTSDKName', '').startswith('iphoneos27.'):
         raise SystemExit('IPA was not built with the iOS 27 SDK')
-    if int(info.get('CFBundleVersion', '0')) < 23:
+    if int(info.get('CFBundleVersion', '0')) < 24:
         raise SystemExit('Build number predates the native scanner')
     result = {key: info.get(key) for key in (
         'CFBundleIdentifier', 'CFBundleShortVersionString',

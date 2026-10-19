@@ -84,10 +84,11 @@ struct SmartMealDraft {
     let source: String
     let createdAt: Date
     let transactionID = UUID()
+    var lowPredictionAcknowledged = false
 
-    static func prefillReasons(settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, source: String, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, now: Date) -> [String] {
+    static func prefillReasons(settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, source: String, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, now: Date, allowLowPredictionReview: Bool = false) -> [String] {
         var reasons = MealReviewFullCalculation.reasons(settings: settings, snapshot: snapshot, source: source, now: now)
-            + MealReviewCalculation.reasons(snapshot: snapshot, samples: samples, newestTreatment: newestTreatment, now: now)
+            + MealReviewCalculation.reasons(snapshot: snapshot, samples: samples, newestTreatment: newestTreatment, now: now, allowLowPredictionReview: allowLowPredictionReview && snapshot?.smartMeal?.allowsLowPredictionReview == true)
         if let settings {
             if settings.isHistorical { reasons.append("Saved Trio settings are historical. Check the current percentage and limits in calculator settings before dose prefill.") }
             else if now.timeIntervalSince(settings.checkedAt) < 0 || now.timeIntervalSince(settings.checkedAt) > 86400 {
@@ -110,15 +111,17 @@ struct SmartMealDraft {
 
     /// Build directly from the automatic full-meal calculation, never a typed
     /// copy of Trio's answer. Confirmation/authentication remain in MealView.
-    static func make(plan: RiceMealPlan, protein: Double, fat: Double, settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, source: String, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, now: Date) -> Self? {
-        guard prefillReasons(settings: settings, snapshot: snapshot, source: source, samples: samples, newestTreatment: newestTreatment, now: now).isEmpty,
+    static func make(plan: RiceMealPlan, protein: Double, fat: Double, settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, source: String, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, now: Date, lowPredictionAcknowledged: Bool = false) -> Self? {
+        let allowReview = lowPredictionAcknowledged && snapshot?.smartMeal?.allowsLowPredictionReview == true
+        guard prefillReasons(settings: settings, snapshot: snapshot, source: source, samples: samples, newestTreatment: newestTreatment, now: now, allowLowPredictionReview: allowReview).isEmpty,
               let settings, let snapshot,
               plan.upfrontInsulin <= settings.maxBolus,
               plan.upfrontInsulin + (snapshot.iob ?? 0) <= settings.maxIOB,
               [protein, fat].allSatisfy({ $0.isFinite && $0 >= 0 && $0 <= 1000 && $0.rounded() == $0 }),
-              let result = MealReviewFullCalculation.review(newCarbs: Double(plan.immediateCarbs + plan.delayedCarbs), settings: settings, snapshot: snapshot, source: source, samples: samples, newestTreatment: newestTreatment, now: now),
+              let result = MealReviewFullCalculation.review(newCarbs: Double(plan.immediateCarbs + plan.delayedCarbs), settings: settings, snapshot: snapshot, source: source, samples: samples, newestTreatment: newestTreatment, now: now, allowLowPredictionReview: allowReview),
               result.rounded == plan.fullRecommendation else { return nil }
-        let draft = Self(plan: plan, protein: protein, fat: fat, settings: settings, snapshot: snapshot, source: source, createdAt: now)
+        var draft = Self(plan: plan, protein: protein, fat: fat, settings: settings, snapshot: snapshot, source: source, createdAt: now)
+        draft.lowPredictionAcknowledged = allowReview && plan.upfrontInsulin > 0 && MealReviewCalculation.lowPredictionNeedsReview(snapshot)
         if settings.receiverConfigurationID != nil {
             guard let status = snapshot.smartMeal,
                   SmartMealDelivery.request(draft: draft, bolus: plan.upfrontInsulin, protein: protein, fat: fat,

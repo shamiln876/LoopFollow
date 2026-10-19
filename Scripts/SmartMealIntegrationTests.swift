@@ -15,7 +15,7 @@ import Testing
               maxCarbs: 150, maxFat: 100, maxProtein: 100, bolusIncrement: 0.05)
     }
 
-    private func senderRequest(_ preset: LoopFollow.SmartMealPreset, dose: Double? = nil) throws -> LoopFollow.SmartMealRequest {
+    private func senderRequest(_ preset: LoopFollow.SmartMealPreset, dose: Double? = nil, lowForecastReview: Bool = false) throws -> LoopFollow.SmartMealRequest {
         var snapshot = LoopFollow.MealReviewSnapshot(date: now, carbRatio: 10, ratioSource: "Trio reported", iob: 1, iobDate: now, cob: 0)
         snapshot.smartMeal = .init(protocolVersion: 1, generatedAt: now.timeIntervalSince1970,
                                    calculationAt: now.timeIntervalSince1970, bundleIdentifier: bundleID, enabled: true, configuration: config, receipts: [])
@@ -23,16 +23,20 @@ import Testing
         snapshot.targetMgdl = 100; snapshot.minPredMgdl = 100; snapshot.minGuardMgdl = 100
         snapshot.activity = 0.01; snapshot.calculationIOB = 1; snapshot.reportedBolusIncrement = 0.05
         snapshot.pumpDate = now; snapshot.uploadUnitSource = "Trio mg/dL fields"
+        if lowForecastReview {
+            snapshot.minPredMgdl = 65; snapshot.minGuardMgdl = 29
+            snapshot.smartMeal?.allowsLowPredictionReview = true
+        }
         let settings = try #require(LoopFollow.SmartMealDelivery.liveSettings(snapshot: snapshot, source: source, bundleID: bundleID, now: now))
         let samples: [LoopFollow.MealReviewCalculation.GlucoseSample] = [.init(date: now.addingTimeInterval(-900), mgdl: 140), .init(date: now, mgdl: 140)]
         let full = try #require(LoopFollow.MealReviewFullCalculation.review(newCarbs: 80, settings: settings, snapshot: snapshot,
-                                                                            source: source, samples: samples, newestTreatment: nil, now: now))
+                                                                            source: source, samples: samples, newestTreatment: nil, now: now, allowLowPredictionReview: lowForecastReview))
         let proposedPlan = LoopFollow.RiceMealPlan(carbs: 80, fullRecommendation: full.rounded,
                                                    upfrontPercent: preset.insulinPercent, confirmedAt: now, carbsNowPercent: preset.carbsNowPercent,
                                                    delayMinutes: preset.delayMinutes, upfrontInsulinOverride: dose)
         let plan = try #require(proposedPlan)
         let draft = try #require(LoopFollow.SmartMealDraft.make(plan: plan, protein: 0, fat: 0, settings: settings,
-                                                                snapshot: snapshot, source: source, samples: samples, newestTreatment: nil, now: now))
+                                                                snapshot: snapshot, source: source, samples: samples, newestTreatment: nil, now: now, lowPredictionAcknowledged: lowForecastReview))
         return try #require(LoopFollow.SmartMealDelivery.request(draft: draft, bolus: plan.upfrontInsulin,
                                                                  protein: 0, fat: 0, snapshot: snapshot, settings: settings, bundleID: bundleID, now: now))
     }
@@ -55,6 +59,26 @@ import Testing
         func store(_ request: Trio.SmartMealRequest) { stored.append([request.immediateCarbs, request.delayedCarbs]) }
         func bolus(_ amount: Decimal) -> Bool { boluses.append(amount); return true }
         func counts() -> [Int] { [stored.count, boluses.count] }
+    }
+
+    @Test func reviewedLowForecastRoundTripsThroughActualCommandDecoderAndReceipt() async throws {
+        let request = try senderRequest(.rice, dose: 0.65, lowForecastReview: true)
+        let decoded = try decodeAtTrio(request)
+        #expect(decoded.lowPredictionAcknowledged == true)
+        #expect(decoded.bolusAmount == 0.65 && decoded.immediateCarbs == 60 && decoded.delayedCarbs == 20)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let receiver = try Trio.SmartMealReceiver(file: root.appendingPathComponent("receiver.json"))
+        let effects = Effects()
+        let receipt = try await receiver.execute(decoded, now: now, validate: {
+            guard Trio.SmartMealForecastPolicy.permits(glucose: 140, minimum: 65, guardMinimum: 29,
+                                                       bolus: decoded.bolusAmount, acknowledged: decoded.lowPredictionAcknowledged == true)
+            else { throw Trio.SmartMealError.contextChanged }
+        }, store: { await effects.store(decoded) }, bolus: { await effects.bolus(decoded.bolusAmount) })
+        #expect(receipt.phase == .accepted)
+        let echoed = try JSONDecoder().decode(LoopFollow.SmartMealReceipt.self, from: JSONEncoder().encode(receipt))
+        #expect(echoed.request == request)
+        #expect(await effects.counts() == [1, 1])
     }
 
     @Test func allPresetsCrossActualCommandDecoderAndReturnCorrelatedReceipt() async throws {

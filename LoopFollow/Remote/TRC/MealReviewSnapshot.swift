@@ -19,6 +19,7 @@ struct MealReviewSnapshot: Codable, Equatable {
     var nativeRecommendation: Double? = nil // Trio calculates this with ZERO new carbs.
     var minPredMgdl: Double? = nil
     var minGuardMgdl: Double? = nil
+    var eventualMgdl: Double? = nil
     var predictions: [String: [Double]] = [:]
     var trioVersion: String? = nil
     var uploadUnitSource = "Unavailable"
@@ -115,6 +116,8 @@ struct MealReviewSnapshot: Codable, Equatable {
         snapshot.targetMgdl = glucoseField("current_target") ?? reasonGlucose("Target")
         snapshot.minPredMgdl = glucoseField("minPredBG", positiveOnly: false) ?? reasonGlucose("minPredBG", positiveOnly: false)
         snapshot.minGuardMgdl = glucoseField("minGuardBG", positiveOnly: false) ?? reasonGlucose("minGuardBG", positiveOnly: false)
+        // Trio leaves this structured field in mg/dL in both upload variants.
+        snapshot.eventualMgdl = sourceVersion == "1.0.2" ? number(calculation["eventualBG"]) : nil
         snapshot.reportedBolusIncrement = number(pumpRecord?["bolusIncrement"])
         snapshot.pumpDate = date(pumpRecord?["clock"])
         snapshot.activity = number(insulin?["activity"])

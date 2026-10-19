@@ -16,6 +16,10 @@ struct MealReviewView: View {
     @State private var fatText = ""
     @State private var sendFatProtein = false
     private let onUse: (SmartMealDraft) -> Void
+    private let onManualMeal: ((Double) -> Void)?
+    @State private var pendingForecastDraft: SmartMealDraft?
+    @State private var forecastWarningPresented = false
+    @State private var forecastReviewError: String?
     @State private var customPercent = "100"
     @State private var linkedPercentages = true
     @State private var bolusOverrideText: String?
@@ -40,8 +44,9 @@ struct MealReviewView: View {
     @ObservedObject private var newestTreatment = Observable.shared.mealReviewNewestTreatment
     @ObservedObject private var trend = Storage.shared.lastTrendCode
 
-    init(initialCarbs: Double, initialBolus: Double? = nil, initialPlan: RiceMealPlan? = nil, settings: StorageValue<MealReviewSettings?> = Storage.shared.mealReviewSettings, source: StorageValue<String> = Storage.shared.url, audit: MealReviewAuditStore = .shared, onUse: @escaping (SmartMealDraft) -> Void) {
+    init(initialCarbs: Double, initialBolus: Double? = nil, initialPlan: RiceMealPlan? = nil, settings: StorageValue<MealReviewSettings?> = Storage.shared.mealReviewSettings, source: StorageValue<String> = Storage.shared.url, audit: MealReviewAuditStore = .shared, onManualMeal: ((Double) -> Void)? = nil, onUse: @escaping (SmartMealDraft) -> Void) {
         self.onUse = onUse
+        self.onManualMeal = onManualMeal
         self.initialCarbs = initialCarbs
         _bolusOverrideText = State(initialValue: initialBolus.map { String(format: "%.2f", $0) })
         self.audit = audit
@@ -108,7 +113,7 @@ struct MealReviewView: View {
                     contextSection(now: now)
                     forecastSection(now: now)
                     Section("Comparison limitations") {
-                        Text("The calculation uses all meal carbs, then applies your saved Trio percentage and limits, followed by the selected upfront percentage. No recommendation needs to be typed. Historical settings and safety holds allow comparison only; they cannot enable dose prefill.")
+                        Text("The calculation uses all meal carbs, then applies your saved Trio percentage and limits, followed by the selected upfront percentage. Low forecasts can be reviewed before transfer. When a calculated dose cannot be verified, manual Meal entry remains available.")
                         DisclosureGroup("What the model includes") {
                             Text("New carbs and existing estimated COB are divided by Trio's active carb ratio. Glucose correction and recent glucose change use the reported effective ISF. Remaining net IOB is subtracted once. IOB and activity are relative to scheduled basal; negative values can represent a basal deficit. This review does not model absorption of the new meal, future SMBs, future ISF changes, or delivery that has not yet reached Nightscout. Uploaded predictions can be wrong. Use Prefill to transfer a local draft; confirmation and authentication occur on the Meal screen.")
                                 .font(.footnote)
@@ -134,6 +139,12 @@ struct MealReviewView: View {
             }
         }
         .sheet(isPresented: $settingsPresented) { MealReviewSettingsView(saved: settings, source: source) }
+        .alert("Review low forecast", isPresented: $forecastWarningPresented, presenting: pendingForecastDraft) { reviewed in
+            Button("Accept and continue") { acceptForecastReview(reviewed) }
+            Button("Cancel", role: .cancel) { pendingForecastDraft = nil }
+        } message: { reviewed in
+            Text(forecastWarningMessage(reviewed))
+        }
         .sheet(isPresented: $foodPresented) {
             CarnivalFoodGuideView(initialMeal: foodMeal) { meal in
                 applyFoodMeal(meal)
@@ -246,7 +257,7 @@ struct MealReviewView: View {
         }
     }
 
-    private func draft(full: Double) -> SmartMealDraft? {
+    private func draft(full: Double, lowPredictionAcknowledged: Bool = false) -> SmartMealDraft? {
         let current = Date()
         guard let plan = makePlan(full: full),
               let protein = Double(sendFatProtein && !proteinText.isEmpty ? proteinText : "0"),
@@ -255,7 +266,8 @@ struct MealReviewView: View {
               Double(plan.immediateCarbs + plan.delayedCarbs) <= localCarbLimit.value.doubleValue(for: .gram()) else { return nil }
         return SmartMealDraft.make(plan: plan, protein: sendFatProtein ? protein : 0, fat: sendFatProtein ? fat : 0,
                                    settings: settings.value, snapshot: snapshot.value, source: source.value,
-                                   samples: history.value, newestTreatment: newestTreatment.value, now: current)
+                                   samples: history.value, newestTreatment: newestTreatment.value, now: current,
+                                   lowPredictionAcknowledged: lowPredictionAcknowledged)
     }
 
     private func scheduleAudit() {
@@ -344,11 +356,40 @@ struct MealReviewView: View {
 
     func useRecommendation(full: Double) {
         // Revalidate at the tap, not just at the last display refresh.
-        guard let draft = draft(full: full) else { return }
+        guard let draft = draft(full: full, lowPredictionAcknowledged: true) else { return }
         carbsFocused = false
         bolusFocused = false
+        if draft.lowPredictionAcknowledged, draft.plan.upfrontInsulin > 0 {
+            pendingForecastDraft = draft
+            forecastWarningPresented = true
+            return
+        }
         onUse(draft)
         dismiss()
+    }
+
+    private func acceptForecastReview(_ reviewed: SmartMealDraft) {
+        let now = Date()
+        guard reviewed.isCurrent(now: now, settings: settings.value, snapshot: snapshot.value, source: source.value),
+              SmartMealDraft.prefillReasons(settings: settings.value, snapshot: snapshot.value, source: source.value,
+                                            samples: history.value, newestTreatment: newestTreatment.value, now: now,
+                                            allowLowPredictionReview: true).isEmpty
+        else {
+            pendingForecastDraft = nil
+            forecastReviewError = "The live inputs changed while this warning was open. Review the updated values, or open manual Meal."
+            return
+        }
+        onUse(reviewed)
+        pendingForecastDraft = nil
+        dismiss()
+    }
+
+    private func forecastWarningMessage(_ reviewed: SmartMealDraft) -> String {
+        let s = reviewed.snapshot
+        let minimum = s.minPredMgdl.map(displayGlucose) ?? "Unavailable"
+        let guardMinimum = s.minGuardMgdl.map(displayGlucose) ?? "Unavailable"
+        let eventual = s.eventualMgdl.map(displayGlucose) ?? "Unavailable"
+        return "Selected minimum: \(minimum). Guard minimum: \(guardMinimum). Eventual endpoint: \(eventual). These forecasts do not include this new meal and may be wrong. You selected \(units(reviewed.plan.upfrontInsulin)), with \(reviewed.plan.immediateCarbs) g now and \(reviewed.plan.delayedCarbs) g later. Accept opens editable Meal; it does not send anything."
     }
 
     @ViewBuilder
@@ -357,7 +398,7 @@ struct MealReviewView: View {
             MealReviewFullCalculation.comparison(newCarbs: $0, settings: settings.value, snapshot: snapshot.value,
                                                  source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
         }
-        let selected = result.flatMap { draft(full: $0.rounded) }
+        let selected = result.flatMap { draft(full: $0.rounded, lowPredictionAcknowledged: true) }
         let needsSettings = settings.value.map {
             $0.isHistorical || !$0.matches(source: source.value, version: snapshot.value?.trioVersion, now: now)
                 || !(0 ... 86400).contains(now.timeIntervalSince($0.checkedAt))
@@ -388,6 +429,19 @@ struct MealReviewView: View {
                     : "Enter meal carbs above to continue.")
                     .font(.caption).fixedSize(horizontal: false, vertical: true)
             }
+            if let onManualMeal {
+                Button("Enter Meal manually") {
+                    let amount = carbs.flatMap { $0.isFinite && (0 ... 1000).contains($0) && $0.rounded() == $0 ? $0 : nil } ?? 0
+                    carbsFocused = false
+                    bolusFocused = false
+                    onManualMeal(amount)
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
+                .accessibilityIdentifier("advisor-manual-meal")
+                Text("Copies full meal carbs with no calculated insulin or delayed entry. Meal stays editable.").font(.caption)
+            }
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
@@ -399,7 +453,7 @@ struct MealReviewView: View {
     @ViewBuilder
     private func fullSection(now: Date) -> some View {
         Section("Insulin") {
-            let prefillHolds = SmartMealDraft.prefillReasons(settings: settings.value, snapshot: snapshot.value, source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now)
+            let prefillHolds = SmartMealDraft.prefillReasons(settings: settings.value, snapshot: snapshot.value, source: source.value, samples: history.value, newestTreatment: newestTreatment.value, now: now, allowLowPredictionReview: snapshot.value?.smartMeal?.allowsLowPredictionReview == true)
             let issues = MealReviewFullCalculation.reasons(settings: settings.value, snapshot: snapshot.value, source: source.value, now: now)
                 + MealReviewCalculation.reasons(snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, now: now, includeSafetyHolds: false)
             if !issues.isEmpty {
@@ -415,7 +469,18 @@ struct MealReviewView: View {
                     row("Calculated comparison, not a dose", units(result.rounded)).font(.title2.weight(.semibold))
                 }
                 selectionSection(full: result.rounded, comparisonOnly: !prefillHolds.isEmpty)
+                if MealReviewCalculation.lowPredictionNeedsReview(snapshot.value) {
+                    warning("Low forecast before this new meal. Review the values before accepting a calculated dose.")
+                    if let minimum = snapshot.value?.minPredMgdl { row("Selected minimum", displayGlucose(minimum)) }
+                    if let minimum = snapshot.value?.minGuardMgdl { row("Guard minimum", displayGlucose(minimum)) }
+                    if let eventual = snapshot.value?.eventualMgdl { row("Eventual endpoint", displayGlucose(eventual)) }
+                    Text("The eventual value is not the minimum. These forecasts do not include the new meal above.").font(.caption)
+                    if snapshot.value?.smartMeal?.allowsLowPredictionReview != true {
+                        Text("The matching Trio warning-review update enables calculated transfer here. Manual Meal is available now.").font(.caption)
+                    }
+                }
                 ForEach(prefillHolds, id: \.self) { warning($0) }
+                if let forecastReviewError { warning(forecastReviewError) }
                 Text("Full meal calculation updates automatically. Your selected amount stays editable before sending.").font(.caption)
                 if result.rounded > localBolusLimit.value.doubleValue(for: .internationalUnit()) {
                     warning("The full comparison exceeds LoopFollow's local bolus limit. The selected upfront amount must fit that limit before prefill.")

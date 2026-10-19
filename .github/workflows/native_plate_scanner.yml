@@ -8,6 +8,9 @@ on:
       - 'Tests/PlateScanTests.swift'
       - 'SmartMealUITests/**'
       - '.github/workflows/native_plate_scanner.yml'
+concurrency:
+  group: native-plate-scanner-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -24,6 +27,8 @@ jobs:
           xcrun --sdk iphonesimulator --show-sdk-version
       - name: Test scanner grounding and review logic
         run: bash Scripts/test-plate-scanner.sh
+      - name: Verify retained Advisor calculation and handoff behavior
+        run: bash Scripts/test-smart-meal-core.sh
       - name: Select an available iOS 27 simulator
         id: simulator
         run: |
@@ -51,6 +56,8 @@ jobs:
             -only-testing:SmartMealUITests/SmartMealHandoffUITests/testOptionalScannerRequiresReviewAndUnknownResolution \
             -only-testing:SmartMealUITests/SmartMealHandoffUITests/testDirectPhotoCancellationKeepsAdvisorCarbs \
             -only-testing:SmartMealUITests/CarnivalManualUITests/testManualHalfBagelStillFillsAdvisorAfterCancellingScanner \
+            -only-testing:SmartMealUITests/SmartMealHandoffUITests/testLowForecastRequiresAcceptAndPreservesEditedDose \
+            -only-testing:SmartMealUITests/SmartMealHandoffUITests/testManualMealRemainsAvailableDuringVeryLowForecast \
             'SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG PLATE_SCAN_REQUIRE_NATIVE' \
             CODE_SIGNING_ALLOWED=NO test | tee "$RUNNER_TEMP/plate-native-build.log"
       - name: Save build and synthetic UI evidence

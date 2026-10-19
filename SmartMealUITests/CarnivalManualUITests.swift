@@ -19,6 +19,7 @@ final class CarnivalManualUITests: XCTestCase {
         XCTAssertTrue(advisor.waitForExistence(timeout: 30))
         advisor.tap()
         let guide = app.buttons["Carnival food & portions"]
+        if !guide.waitForExistence(timeout: 5), advisor.isHittable { advisor.tap() }
         XCTAssertTrue(guide.waitForExistence(timeout: 10))
         guide.tap()
 
