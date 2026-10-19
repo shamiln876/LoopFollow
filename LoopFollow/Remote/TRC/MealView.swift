@@ -371,8 +371,9 @@ struct MealView: View {
                                                 self.alertType = .validationError
                                                 self.showAlert = true
                                             case .canceled:
-                                                // User canceled, no alert
-                                                break
+                                                self.alertMessage = "Authentication canceled. No meal command was submitted."
+                                                self.alertType = .validationError
+                                                self.showAlert = true
                                             }
                                         }
                                     }
@@ -385,7 +386,7 @@ struct MealView: View {
                     )
                 case .statusSuccess:
                     return Alert(
-                        title: Text("Command Sent"),
+                        title: Text("Delivery NOT Confirmed"),
                         message: Text(statusMessage ?? ""),
                         dismissButton: .default(Text("OK"), action: {
                             presentationMode.wrappedValue.dismiss()
@@ -500,9 +501,7 @@ struct MealView: View {
                             bolus: bolusAmount.doubleValue(for: .internationalUnit())
                         )
                     }
-                    statusMessage = isSmartMeal
-                        ? "Request sent. Waiting for Trio to confirm meal entries and upfront bolus initiation. Nothing is confirmed by APNs acceptance alone."
-                        : RemoteCommandMessage.sent
+                    statusMessage = "Apple accepted the remote meal request, but neither carb entry nor pump insulin delivery is verified. Check the actual Trio meal entry and pump bolus history before relying on this dose. Do NOT resend until you confirm what was delivered."
                     LogManager.shared.log(
                         category: .apns,
                         message: "sendMealPushNotification succeeded - Carbs: \(carbs.doubleValue(for: .gram())) g, Protein: \(protein.doubleValue(for: .gram())) g, Fat: \(fat.doubleValue(for: .gram())) g, Bolus: \(bolusAmount.doubleValue(for: .internationalUnit())) U, Scheduled: \(scheduledDate != nil ? formatDate(scheduledDate!) : "now")"
@@ -516,7 +515,7 @@ struct MealView: View {
                     isScheduling = false
                     alertType = .statusSuccess
                 } else {
-                    statusMessage = (errorMessage ?? "Failed to send meal command.") + (advisorDraft != nil ? " Delivery is uncertain. Check Trio and Nightscout before creating another draft; do not retry blindly." : "")
+                    statusMessage = (errorMessage ?? "Could not verify remote command submission.") + " Delivery status is uncertain. Check Trio and actual pump bolus history before deciding whether to retry. Do NOT automatically resend."
                     LogManager.shared.log(
                         category: .apns,
                         message: "sendMealPushNotification failed with error: \(errorMessage ?? "unknown error")"
