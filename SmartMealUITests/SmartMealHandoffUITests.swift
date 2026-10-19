@@ -18,6 +18,57 @@ final class SmartMealHandoffUITests: XCTestCase {
         exercisePercentageControl(rice: false, linked: false)
     }
 
+    func testOptionalScannerRequiresReviewAndUnknownResolution() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--smart-meal-ui-test", "--plate-scanner-ui-test"]
+        app.launch()
+        let entry = app.buttons["home-meal-dashboard"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 30)); entry.tap()
+        app.buttons["Carnival food & portions"].tap()
+        app.buttons["carnival-photo-scanner"].tap()
+        let accept = app.buttons["plate-scan-accept"]
+        for _ in 0 ..< 4 where !accept.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(accept.waitForExistence(timeout: 10)); XCTAssertFalse(accept.isEnabled)
+        let remove = app.buttons.matching(identifier: "Remove food")
+        XCTAssertEqual(remove.count, 2)
+        remove.element(boundBy: 1).tap()
+        app.buttons["Add food"].tap()
+        let search = app.textFields["plate-match-query"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("Bagel Plain")
+        app.buttons["plate-match-MG8D7CE49"].tap()
+        let addedRemove = app.buttons.matching(identifier: "Remove food")
+        for _ in 0 ..< 4 where !addedRemove.element(boundBy: 1).isHittable {
+            app.swipeUp()
+        }
+        XCTAssertEqual(addedRemove.count, 2)
+        addedRemove.element(boundBy: 1).tap()
+        let increase = app.buttons["Increase portion"].firstMatch
+        for _ in 0 ..< 4 where !increase.isHittable {
+            app.swipeDown()
+        }
+        increase.tap()
+        XCTAssertTrue(app.staticTexts["Estimated carbs: 39 g"].exists)
+        app.buttons["Decrease portion"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Estimated carbs: 26 g"].exists)
+        let confirm = app.switches["I checked this match and portion"]
+        for _ in 0 ..< 4 where !confirm.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        for _ in 0 ..< 4 where !accept.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(accept.isEnabled)
+        let capture = XCTAttachment(screenshot: app.screenshot()); capture.name = "Reviewed optional plate scanner"; capture.lifetime = .keepAlways; add(capture)
+        accept.tap()
+        XCTAssertTrue(app.textFields["advisor-meal-carbs"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.textFields["advisor-meal-carbs"].value as? String, "26")
+        app.terminate()
+    }
+
     private func exercisePercentageControl(rice: Bool, linked: Bool = true) {
         let app = XCUIApplication()
         app.launchArguments = ["--smart-meal-ui-test", "--smart-meal-percentage-test"]

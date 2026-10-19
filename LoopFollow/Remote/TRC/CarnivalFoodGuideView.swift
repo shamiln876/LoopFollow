@@ -8,6 +8,8 @@ struct CarnivalFoodGuideView: View {
     @State private var query = ""
     @State private var venue = ""
     @State private var tab = 0
+    @State private var showPhotoScanner = false
+    @State private var acceptedPhotoMeal: CarnivalMeal?
     @State private var items: [CarnivalMeal.Item]
     private let catalog: Result<CarnivalFoodCatalog, Error>
     private let use: (CarnivalMeal) -> Void
@@ -51,10 +53,19 @@ struct CarnivalFoodGuideView: View {
             }
         }
         .scrollDismissesKeyboard(.interactively)
+        .sheet(isPresented: $showPhotoScanner, onDismiss: {
+            if let meal = acceptedPhotoMeal { acceptedPhotoMeal = nil; use(meal); dismiss() }
+        }) {
+            PlateScannerView(catalog: guide) { meal in acceptedPhotoMeal = meal }
+        }
     }
 
     @ViewBuilder
     private func searchSections(_ guide: CarnivalFoodCatalog) -> some View {
+        Section {
+            Button { showPhotoScanner = true } label: { Label("Take / upload plate photo (optional)", systemImage: "camera") }
+                .accessibilityIdentifier("carnival-photo-scanner")
+        }
         Section("Search food or venue") {
             TextField("Rice, nuggets, burger…", text: $query).autocorrectionDisabled()
                 .accessibilityLabel("Search Carnival foods")

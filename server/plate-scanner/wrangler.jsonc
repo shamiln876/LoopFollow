@@ -1,0 +1,7 @@
+{
+  "name": "loopfollow-private-plate-scanner",
+  "main": "worker.mjs",
+  "compatibility_date": "2025-10-01",
+  "observability": {"enabled": false},
+  "unsafe": {"bindings": [{"name": "RATE_LIMITER", "type": "ratelimit", "namespace_id": "1001", "simple": {"limit": 5, "period": 60}}]}
+}
