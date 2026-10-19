@@ -28,7 +28,7 @@ struct RiceMealPlanTests {
         }
         let rice = plan(80)!
         #expect(rice.immediateCarbs == 60 && rice.delayedCarbs == 20)
-        #expect(rice.delayedDate.timeIntervalSince(date) == 1800)
+        #expect(rice.delayedDate.timeIntervalSince(date) == 2100)
         #expect(rice.fullRecommendation == 5.8 && rice.upfrontInsulin == 4.35)
         #expect(plan(80, 5.8, 60)!.upfrontInsulin == 3.45)
         #expect(plan(80, 5.8, 0)!.upfrontInsulin == 0)
@@ -106,7 +106,7 @@ struct RiceMealPlanTests {
                 #expect(plan.fullRecommendation == 5.8)
                 #expect(plan.upfrontInsulin <= 5.8 * percent / 100 + 0.000001)
                 #expect(plan.delayedInsulin == 0)
-                #expect(delay == (percent == 100 ? 0 : preset == .pizza ? 60 : 30))
+                #expect(delay == (percent == 100 ? 0 : preset == .pizza ? 60 : 35))
             }
         }
         #expect(SmartMealPreset.rice.linkedCarbDelay(percent: 75, selectedDelay: 45) == 45)

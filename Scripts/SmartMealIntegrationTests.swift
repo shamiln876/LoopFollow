@@ -72,6 +72,9 @@ import Testing
         #expect(payloadAtTrio.commandType == .smartMeal)
         #expect(payloadAtTrio.carbs == nil && payloadAtTrio.bolusAmount == nil && payloadAtTrio.scheduledTime == nil)
         let decoded = try #require(payloadAtTrio.smartMeal)
+        if request.delayedCarbs > 0, request.delaySeconds == 2100 {
+            #expect(decoded.delayedAt == request.confirmedAt + 2100)
+        }
         let nativeConfig = try JSONDecoder().decode(Trio.SmartMealConfiguration.self, from: JSONEncoder().encode(config))
         #expect(nativeConfig.identifier == config.identifier)
         try decoded.validate(configuration: nativeConfig, now: now)

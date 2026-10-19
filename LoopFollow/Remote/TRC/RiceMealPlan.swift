@@ -9,13 +9,13 @@ enum SmartMealPreset: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var carbsNowPercent: Double { switch self { case .rice: 75; case .pizza: 70; default: 100 } }
     var insulinPercent: Double { switch self { case .rice: 75; case .pizza: 70; default: 100 } }
-    var delayMinutes: Double { switch self { case .rice: 30; case .pizza: 60; default: 0 } }
+    var delayMinutes: Double { switch self { case .rice: 35; case .pizza: 60; default: 0 } }
 
     /// A reduced linked percentage announces the same fraction of carbs now.
     /// Preserve an explicitly chosen positive delay; otherwise use the preset delay.
     func linkedCarbDelay(percent: Double, selectedDelay: Double) -> Double {
         guard percent < 100 else { return 0 }
-        return selectedDelay == 0 ? (self == .pizza ? 60 : 30) : selectedDelay
+        return selectedDelay == 0 ? (self == .pizza ? 60 : 35) : selectedDelay
     }
 }
 
@@ -35,7 +35,7 @@ struct RiceMealPlan: Equatable {
 
     static let sendingBlocker = "Split carbs need the matching Trio update and its latest connection. Nothing has been sent or scheduled."
 
-    init?(carbs: Double, fullRecommendation: Double, upfrontPercent: Double, confirmedAt: Date, carbsNowPercent: Double = 75, delayMinutes: Double = 30, upfrontInsulinOverride: Double? = nil, preset: SmartMealPreset? = nil) {
+    init?(carbs: Double, fullRecommendation: Double, upfrontPercent: Double, confirmedAt: Date, carbsNowPercent: Double = 75, delayMinutes: Double = 35, upfrontInsulinOverride: Double? = nil, preset: SmartMealPreset? = nil) {
         // The existing remote protocol accepts whole grams. Never truncate two fractions independently.
         guard carbs.isFinite, carbs >= 1, carbs <= 1000, carbs.rounded() == carbs,
               fullRecommendation.isFinite, fullRecommendation >= 0, fullRecommendation <= 100,

@@ -281,7 +281,10 @@ final class SmartMealHandoffUITests: XCTestCase {
             let openAdvisor = app.buttons["meal-open-advisor"]
             XCTAssertTrue(openAdvisor.waitForExistence(timeout: 10)); openAdvisor.tap()
         }
-        if riceSplit { selectRice(app) }
+        if riceSplit {
+            selectRice(app)
+            XCTAssertEqual(app.textFields["Minutes"].value as? String, "35")
+        }
         let carbs = app.textFields["advisor-meal-carbs"]
         XCTAssertTrue(carbs.waitForExistence(timeout: 10)); carbs.tap(); carbs.typeText("80")
         hideKeyboard(app)
