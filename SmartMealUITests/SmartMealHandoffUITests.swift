@@ -284,7 +284,12 @@ final class SmartMealHandoffUITests: XCTestCase {
         }
         if riceSplit {
             selectRice(app)
-            XCTAssertEqual(app.textFields["Minutes"].value as? String, "35")
+            let timing = app.buttons["Custom percentages and timing"]
+            XCTAssertTrue(timing.waitForExistence(timeout: 10)); timing.tap()
+            let minutes = app.textFields["Minutes"]
+            XCTAssertTrue(minutes.waitForExistence(timeout: 10))
+            XCTAssertEqual(minutes.value as? String, "35")
+            timing.tap()
         }
         let carbs = app.textFields["advisor-meal-carbs"]
         XCTAssertTrue(carbs.waitForExistence(timeout: 10)); carbs.tap(); carbs.typeText("80")

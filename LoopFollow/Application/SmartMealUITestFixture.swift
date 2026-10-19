@@ -10,14 +10,18 @@
     struct SmartMealUITestFixture: View {
         static var enabled: Bool { ProcessInfo.processInfo.arguments.contains("--smart-meal-ui-test") }
         private static var configured = false
-        @State private var mealPresented = false
-        @State private var percentageAdvisorPresented = false
-        @State private var percentageMeal: PercentageMealRoute?
+        @State private var route: FixtureRoute?
         @State private var percentageDraft: SmartMealDraft?
 
-        private struct PercentageMealRoute: Identifiable {
-            let id = UUID()
-            let draft: SmartMealDraft
+        private enum FixtureRoute: Identifiable {
+            case meal, percentageAdvisor, percentageMeal(SmartMealDraft)
+            var id: String {
+                switch self {
+                case .meal: return "meal"
+                case .percentageAdvisor: return "advisor"
+                case let .percentageMeal(draft): return "meal-" + draft.transactionID.uuidString
+                }
+            }
         }
 
         @MainActor static func configure() {
@@ -76,20 +80,24 @@
                 Text("Synthetic meal workflow test").font(.caption)
                 MealDashboardHomeCard()
                 if ProcessInfo.processInfo.arguments.contains("--smart-meal-percentage-test") {
-                    Button("Review synthetic 80 g meal") { percentageAdvisorPresented = true }
+                    Button("Review synthetic 80 g meal") { route = .percentageAdvisor }
                         .accessibilityIdentifier("fixture-percentage-advisor")
                 }
-                Button("Open Meal") { mealPresented = true }.accessibilityIdentifier("fixture-open-meal")
+                Button("Open Meal") { route = .meal }.accessibilityIdentifier("fixture-open-meal")
             }
             .padding()
-            .sheet(isPresented: $mealPresented) { MealView() }
-            .sheet(isPresented: $percentageAdvisorPresented, onDismiss: {
-                if let percentageDraft { percentageMeal = PercentageMealRoute(draft: percentageDraft) }
-            }) {
-                MealReviewView(initialCarbs: 80) { percentageDraft = $0 }
-            }
-            .sheet(item: $percentageMeal) { route in
-                MealView(initialAdvisorDraft: route.draft)
+            .sheet(item: $route, onDismiss: {
+                if let draft = percentageDraft {
+                    percentageDraft = nil
+                    route = .percentageMeal(draft)
+                }
+            }) { selected in
+                switch selected {
+                case .meal: MealView()
+                case .percentageAdvisor:
+                    MealReviewView(initialCarbs: 80) { percentageDraft = $0 }
+                case let .percentageMeal(draft): MealView(initialAdvisorDraft: draft)
+                }
             }
         }
     }
