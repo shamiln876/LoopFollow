@@ -36,7 +36,8 @@ final class SmartMealHandoffUITests: XCTestCase {
         let warning = app.alerts["Review low forecast"]
         XCTAssertTrue(warning.waitForExistence(timeout: 5))
         warning.buttons["Cancel"].tap()
-        XCTAssertTrue(app.textFields["advisor-meal-carbs"].exists)
+        XCTAssertTrue(use.waitForExistence(timeout: 5))
+        XCTAssertEqual(dose.value as? String, "0.65")
         use.tap()
         XCTAssertTrue(warning.waitForExistence(timeout: 5))
         warning.buttons["Accept and continue"].tap()

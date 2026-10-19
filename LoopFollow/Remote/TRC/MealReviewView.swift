@@ -26,9 +26,12 @@ struct MealReviewView: View {
     @FocusState private var bolusFocused: Bool
     @State private var carbText: String
     @State private var refreshAnchor = Date()
-    @State private var settingsPresented = false
-    @State private var foodPresented = false
-    @State private var platePresented = false
+    private enum AdvisorSheet: String, Identifiable {
+        case settings, foods, photo
+        var id: String { rawValue }
+    }
+
+    @State private var activeSheet: AdvisorSheet?
     @State private var foodMeal: CarnivalMeal?
     @State private var reviewSession = UUID()
     @State private var pendingAudit: DispatchWorkItem?
@@ -83,8 +86,8 @@ struct MealReviewView: View {
                         }
                         presetSection
                         if carbsFocused { Button("Hide keyboard") { carbsFocused = false; bolusFocused = false } }
-                        Button("Carnival food & portions") { carbsFocused = false; foodPresented = true }
-                        Button { carbsFocused = false; platePresented = true } label: {
+                        Button("Carnival food & portions") { carbsFocused = false; activeSheet = .foods }
+                        Button { carbsFocused = false; activeSheet = .photo } label: {
                             Label("Scan plate photo", systemImage: "camera")
                         }.accessibilityIdentifier("advisor-scan-plate")
                         if let foodMeal {
@@ -138,22 +141,23 @@ struct MealReviewView: View {
                 .onChange(of: context.date) { _, _ in scheduleAudit() }
             }
         }
-        .sheet(isPresented: $settingsPresented) { MealReviewSettingsView(saved: settings, source: source) }
         .alert("Review low forecast", isPresented: $forecastWarningPresented, presenting: pendingForecastDraft) { reviewed in
             Button("Accept and continue") { acceptForecastReview(reviewed) }
             Button("Cancel", role: .cancel) { pendingForecastDraft = nil }
         } message: { reviewed in
             Text(forecastWarningMessage(reviewed))
         }
-        .sheet(isPresented: $foodPresented) {
-            CarnivalFoodGuideView(initialMeal: foodMeal) { meal in
-                applyFoodMeal(meal)
-            }
-        }
-        .sheet(isPresented: $platePresented) {
-            switch CarnivalFoodCatalog.bundled {
-            case let .success(catalog): PlateScannerView(catalog: catalog, accept: applyFoodMeal)
-            case .failure: Text("The food guide could not be verified. Use manual carb entry until the guide is restored.").padding()
+        .sheet(item: $activeSheet) { route in
+            switch route {
+            case .settings:
+                MealReviewSettingsView(saved: settings, source: source)
+            case .foods:
+                CarnivalFoodGuideView(initialMeal: foodMeal, use: applyFoodMeal)
+            case .photo:
+                switch CarnivalFoodCatalog.bundled {
+                case let .success(catalog): PlateScannerView(catalog: catalog, accept: applyFoodMeal)
+                case .failure: Text("The food guide could not be verified. Use manual carb entry until the guide is restored.").padding()
+                }
             }
         }
         .onAppear { MealReviewSettingsImport.consumePending(); scheduleAudit() }
@@ -418,7 +422,7 @@ struct MealReviewView: View {
                     .font(.caption).fixedSize(horizontal: false, vertical: true)
                 Button("Check Trio settings to enable transfer") {
                     carbsFocused = false
-                    settingsPresented = true
+                    activeSheet = .settings
                 }
                 .frame(maxWidth: .infinity)
                 .accessibilityIdentifier("advisor-check-settings")
@@ -519,7 +523,7 @@ struct MealReviewView: View {
                     if let reference = s.historicalReference { Text(reference).font(.footnote) }
                 }
             }
-            Button(settings.value == nil ? "Enter current Trio settings" : "Check copied Trio settings") { settingsPresented = true }
+            Button(settings.value == nil ? "Enter current Trio settings" : "Check copied Trio settings") { activeSheet = .settings }
             if let s = settings.value {
                 Text("\(s.isHistorical ? "Historical values entered" : "Values last checked") \(s.checkedAt.formatted(date: .abbreviated, time: .shortened)). Standard calculation; reduced and super bolus excluded.").font(.footnote)
             }
