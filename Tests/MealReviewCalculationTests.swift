@@ -6,6 +6,15 @@ import Foundation
 import Testing
 
 struct MealReviewCalculationTests {
+    @Test func selectedMinimumGuardAndEventualEndpointRemainDistinct() throws {
+        let record: [String: AnyObject] = ["version": "1.0.2" as AnyObject,
+            "suggested": ["deliverAt": "2023-11-14T22:13:20Z", "bg": 117, "eventualBG": 107,
+                          "reason": "ISF: 39→39, Target: 144, minPredBG 65, minGuardBG 29"] as AnyObject]
+        let s = try #require(MealReviewSnapshot.parse(record, profileRatio: 12, profileUnits: "mmol/L"))
+        #expect(s.minPredMgdl == 65 && s.minGuardMgdl == 29)
+        #expect(s.eventualMgdl == 107)
+        #expect(MealReviewCalculation.lowPredictionNeedsReview(s))
+    }
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
     private var samples: [MealReviewCalculation.GlucoseSample] {
         [.init(date: now.addingTimeInterval(-900), mgdl: 175), .init(date: now, mgdl: 180)]
