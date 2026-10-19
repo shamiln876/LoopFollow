@@ -62,10 +62,10 @@ enum PlateScanOnDevice {
     @available(iOS 27.0, *)
     @Generable
     private struct NativePlateResult {
-        @Guide(description: "True only if every visible food is included, even unknown foods.")
-        var complete: Bool
         @Guide(description: "Every visible food, including unknown sauces and toppings.", .maximumCount(20))
         var items: [NativePlateFood]
+        @Guide(description: "True only after every visible food is included, even unknown foods.")
+        var complete: Bool
     }
 
     @available(iOS 27.0, *)
@@ -140,7 +140,7 @@ enum PlateScanOnDevice {
                                                """)
             do {
                 let result = try await session.respond(generating: NativePlateResult.self,
-                                                       options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 1800))
+                                                       options: GenerationOptions(samplingMode: .greedy))
                 {
                     "Review this plate. Identify foods, look up likely Carnival matches, and estimate visible base portions."
                     Attachment(image)
