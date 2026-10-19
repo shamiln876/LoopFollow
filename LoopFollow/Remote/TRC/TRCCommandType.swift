@@ -9,6 +9,7 @@ enum TRCCommandType: String, Encodable {
     case cancelTempTarget = "cancel_temp_target"
     case meal
     case smartMeal = "smart_meal"
+    case postMealSMB = "post_meal_smb"
     case startOverride = "start_override"
     case cancelOverride = "cancel_override"
 
@@ -18,6 +19,7 @@ enum TRCCommandType: String, Encodable {
         case .tempTarget: return "Temp Target"
         case .cancelTempTarget: return "Cancel Temp Target"
         case .meal: return "Meal"
+        case .postMealSMB: return "Post-meal SMB block"
         case .smartMeal: return "Smart Meal"
         case .startOverride: return "Start Override"
         case .cancelOverride: return "Cancel Override"

@@ -170,6 +170,12 @@ class PushNotificationManager {
         sendEncryptedCommand(payload: payload, completion: completion)
     }
 
+    func sendPostMealSMBSetting(_ request: PostMealSMBSettingRequest, completion: @escaping (Bool, String?) -> Void) {
+        let payload = CommandPayload(user: user, commandType: .postMealSMB, timestamp: Date().timeIntervalSince1970,
+                                     returnNotification: createReturnNotificationInfo(), postMealSMB: request)
+        sendEncryptedCommand(payload: payload, completion: completion)
+    }
+
     private func validateCredentials() -> [String]? {
         var errors = [String]()
         let keyIdPattern = "^[A-Z0-9]{10}$"

@@ -114,7 +114,7 @@ struct SmartMealDeliveryTests {
         #expect(request.totalCarbs == 80 && request.immediateCarbs == 60 && request.delayedCarbs == 20)
         #expect(request.bolusAmount == Decimal(string: "0.65")!)
         #expect(request.fullRecommendation == Decimal(string: "5.8")!)
-        #expect(request.delayedAt == now.addingTimeInterval(1800).timeIntervalSince1970)
+        #expect(request.delayedAt == now.addingTimeInterval(2100).timeIntervalSince1970)
         #expect(request.id == draft.transactionID && !request.includeFatProtein)
         let payload = CommandPayload(user: "test", commandType: .smartMeal, timestamp: request.confirmedAt, smartMeal: request)
         let json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as? [String: Any])

@@ -6,6 +6,28 @@ import XCTest
 final class SmartMealHandoffUITests: XCTestCase {
     override func setUp() { super.setUp(); continueAfterFailure = false }
 
+    func testPostMealSMBToggleShowsControllerStateAndHoldsUnsupportedTrio() {
+        for mode in ["on", "off", "unsupported"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--smart-meal-ui-test"]
+            if mode != "unsupported" { app.launchArguments.append("--post-meal-smb-ui-test") }
+            if mode == "off" { app.launchArguments.append("--post-meal-smb-disabled") }
+            app.launch()
+            let open = app.buttons["fixture-open-meal"]
+            XCTAssertTrue(open.waitForExistence(timeout: 30)); open.tap()
+            let toggle = app.switches["post-meal-smb-toggle"]
+            if mode == "unsupported" {
+                XCTAssertTrue(app.staticTexts["Updated Trio with a fresh paired status is required. Block status is unconfirmed."].waitForExistence(timeout: 10))
+                XCTAssertFalse(toggle.exists)
+            } else {
+                XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+                XCTAssertEqual(toggle.value as? String, mode == "on" ? "1" : "0")
+                XCTAssertEqual(app.staticTexts["post-meal-smb-until"].exists, mode == "on")
+            }
+            app.terminate()
+        }
+    }
+
     func testFivePercentControlLinksFullMealCarbsAndTransfersUnits() {
         exercisePercentageControl(rice: false)
     }
@@ -260,7 +282,15 @@ final class SmartMealHandoffUITests: XCTestCase {
             let openAdvisor = app.buttons["meal-open-advisor"]
             XCTAssertTrue(openAdvisor.waitForExistence(timeout: 10)); openAdvisor.tap()
         }
-        if riceSplit { selectRice(app) }
+        if riceSplit {
+            selectRice(app)
+            let timing = app.buttons["Custom percentages and timing"]
+            XCTAssertTrue(timing.waitForExistence(timeout: 10)); timing.tap()
+            let minutes = app.textFields["Minutes"]
+            XCTAssertTrue(minutes.waitForExistence(timeout: 10))
+            XCTAssertEqual(minutes.value as? String, "35")
+            timing.tap()
+        }
         let carbs = app.textFields["advisor-meal-carbs"]
         XCTAssertTrue(carbs.waitForExistence(timeout: 10)); carbs.tap(); carbs.typeText("80")
         hideKeyboard(app)

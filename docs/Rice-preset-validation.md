@@ -1,3 +1,5 @@
+> Current development default: the scheduled second Rice carb entry is +35 minutes, per user request. The SMB block remains one 30-minute window; neither delayed carbs nor FPU restarts it. Historical +30-minute examples below predate this change.
+
 # Rice preset — preview implemented, automatic sending blocked
 
 Based on feature/read-only-smart-meal-advisor at 2757c5d. No live commands, pump settings, or Trio files were changed. The pre-existing read-only dashboard remains read-only.
