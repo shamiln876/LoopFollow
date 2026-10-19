@@ -12,21 +12,21 @@ Photos are redrawn to at most 1280 pixels on the longest side, encoded as JPEG w
 
 ## Provider assessment
 
-OpenAI Responses supports image input and structured JSON output: https://developers.openai.com/api/docs/guides/images-vision and https://developers.openai.com/api/reference/resources/responses/methods/create . The supplied server defaults to `gpt-4.1-mini`, configurable with `OPENAI_MODEL`; live availability/accuracy have not been verified in the user's account. A photograph cannot establish exact mass, hidden ingredients, sauces or carbohydrate reliability; all suggestions require review.
+OpenAI Responses supports image input and structured JSON output: https://developers.openai.com/api/docs/guides/images-vision and https://developers.openai.com/api/reference/resources/responses/methods/create . The supplied server pins `gpt-4.1-mini-2025-04-14`; an `OPENAI_MODEL` override is ignored; live availability/accuracy have not been verified in the user's account. A photograph cannot establish exact mass, hidden ingredients, sauces or carbohydrate reliability; all suggestions require review.
 
 Apple's latest Foundation Models documentation describes multimodal prompting (https://developer.apple.com/documentation/FoundationModels/analyzing-images-with-multimodal-prompting). However, the installed Xcode 26.1.1 iPhoneOS 26.1 FoundationModels Swift interface exposes text Prompt inputs and no ImageAttachment interface. This project supports iOS 18+. Apple image understanding is therefore not an implemented, tested option for this toolchain/deployment target. Do not claim it is impossible on newer SDKs. OCR/classification alone is insufficient for this catalog/portion task.
 
 ## Secure server package
 
-`server/plate-scanner/worker.mjs` is a Cloudflare Worker with an authenticated `/scan` POST route, bounded JPEG input, exact catalog fingerprint, server-side catalog prompt, strict structured output, validated catalog IDs/portions, no request-body logging, no persistence, and no automatic retries. `store:false` is sent to OpenAI; this does not assert zero provider retention. Provider policy still applies. The client refuses HTTP, URL credentials/query secrets and redirects, uses ephemeral networking, and stores its service access token in device-only Keychain.
+`server/plate-scanner/worker.mjs` is a Cloudflare Worker with an authenticated `/scan` POST route, bounded JPEG input, exact catalog fingerprint, server-side catalog prompt, strict structured output, validated catalog IDs/portions, no request-body logging, no photo persistence, and no automatic retries. `store:false` is sent to OpenAI; this does not assert zero provider retention. Provider policy still applies. The client refuses HTTP, URL credentials/query secrets and redirects, uses ephemeral networking, and stores its service access token in device-only Keychain.
 
 Server deployment requires an owner-controlled Cloudflare account and an OpenAI API project with billing/credits. ChatGPT subscription access alone does not configure this API. Neither account was supplied; no live provider test or deployment has occurred. The final credentials/account activation require the account owner. Do not put secrets in source, chat, GitHub artifacts, app bundle or UserDefaults.
 
-When accounts are available, an operator should use `wrangler secret put OPENAI_API_KEY` and `wrangler secret put SCANNER_ACCESS_TOKEN` (at least 32 random characters), then `wrangler deploy` from this server directory. Configure the resulting HTTPS `/scan` URL and separate access token in Scanner setup. OpenAI key stays server-side. Keep account spending limits/alerts and the supplied five-requests-per-minute Cloudflare binding enabled; the service token is revocable. This is a private family deployment, not a multi-user authentication platform.
+When accounts are available, an operator should use `wrangler secret put OPENAI_API_KEY` and `wrangler secret put SCANNER_ACCESS_TOKEN` (at least 32 random characters), then `wrangler deploy` from this server directory. Configure the resulting HTTPS `/scan` URL and separate access token in Scanner setup. OpenAI key stays server-side. Before enabling scans, configure a dedicated OpenAI project with a US$3 enforced monthly hard spend limit and no automatic credit recharge. Keep the supplied five-requests-per-minute Cloudflare binding enabled; the service token is revocable. This is a private family deployment, not a multi-user authentication platform.
 
 ## Verification
 
-`bash Scripts/test-plate-scanner.sh` runs seven pure Swift/transport tests and six mocked server tests without live API or pump access. The SmartMealUI synthetic scanner test exercises the real Advisor → guide → scanner → Advisor route, including unresolved blocking, explicit review, Add/Remove, immediate +/- totals and the accepted catalog total. A separate manual regression test checks scanner cancellation and offline half-bagel entry into Advisor using empty treatment credentials. No physical camera or live recognition accuracy is established by these tests. Full build/UI outcomes are recorded in the final delivery report, not inferred from source presence.
+`bash Scripts/test-plate-scanner.sh` runs seven pure Swift/transport tests and twelve server/quota tests without live API or pump access. The SmartMealUI synthetic scanner test exercises the real Advisor → guide → scanner → Advisor route, including unresolved blocking, explicit review, Add/Remove, immediate +/- totals and the accepted catalog total. A separate manual regression test checks scanner cancellation and offline half-bagel entry into Advisor using empty treatment credentials. No physical camera or live recognition accuracy is established by these tests. Full build/UI outcomes are recorded in the final delivery report, not inferred from source presence.
 
 No previous `optional_plate_scanner.zip` was found in this workspace or temporary-file search. A new patch/archive is generated from the validated commit for delivery; it must not be represented as the earlier claimed package.
 
@@ -40,3 +40,23 @@ Verified locally on October 18, 2026 with Xcode 26.1.1:
 - Final app/test compile succeeded for the arm64 iOS 26.1 simulator. No physical camera, live OpenAI image recognition or clinical outcomes were tested.
 
 Physical iPhone installation and TestFlight publication are coordinated separately by the primary “Complete LoopFollow development” chat. Do not infer installation from this branch's build number 22. Existing TestFlight release 21 and the father's Trio 1.0.2 (9) are not changed by a source commit.
+
+
+## Cost protection added October 18, 2026
+
+The user's new-service budget is $10/month; currency has not been confirmed, so no paid hosting subscription is activated. Start with Workers Free and its SQLite-backed Durable Object, which stops serving when free quotas are exceeded rather than charging overages. This plan selection is an account/deployment requirement, not something the source can enforce. Do not upgrade or introduce a paid model fallback automatically.
+
+Every valid authenticated scan must first reserve one attempt in the single `family-scanner` Durable Object: **10 attempts per UTC day, 100 per UTC calendar month**. Reserve atomically before the OpenAI request; retain the reservation even on timeout, error, refusal or incomplete output. All devices and locations share the counter. Missing/broken storage fails closed. Restarts and service-token rotation do not reset it. Do not rename the Worker, binding, class, object ID or migration namespace, or delete its storage to bypass an allowance. A UTC month boundary intentionally grants the next month's allowance.
+
+The provider model is pinned and output remains capped at 3,000 tokens; there is one provider call and no automatic retries. A five-per-minute regional rate limiter is not a monthly spending cap and is not relied on as one.
+
+The actual catalog/instructions tokenize to 41,851 tokens with o200k_base. At the current GPT-4.1 mini rates of US$0.40/M input and US$1.60/M output, allowing 2,592 image tokens, 1,000 other input tokens, and 500–3,000 output tokens, estimated cost is US$0.019–0.023 per normal app scan, or US$1.90–2.30 for 100 attempts, without cache discounts. This is a usage estimate, not a guaranteed currency ceiling: provider pricing, request processing and taxes/FX are external. The separately configured provider project hard cap is needed as another layer; official documentation notes enforcement can lag slightly. A gateway counter cannot cap requests made outside that gateway. No account hard cap has yet been configured and no paid service has been activated.
+
+Validation: twelve Node tests passed, including concurrent reservations, monthly exhaustion and rollover, corrupt state, failed storage, missing/exhausted quota preventing provider access, and no retry/refund on provider error. A separate actual local Workers/SQLite runtime check admitted exactly 10 of 100 concurrent requests and retained the exhausted allowance after runtime restart. Wrangler 4.151.1 deployment dry-run passed with the new SQLite Durable Object binding. No paid API calls or live deployment were made. Swift/app source and pump settings are unchanged by this server update.
+
+Sources:
+- https://developers.openai.com/api/docs/models/gpt-4.1-mini
+- https://developers.openai.com/api/docs/guides/spend-limits
+- https://developers.cloudflare.com/durable-objects/platform/pricing/
+
+An iOS 27 update on the caregiver phone enables investigation of Apple's newer on-device image-input API, but does not implement it in the installed app. Integration needs a compatible SDK and actual device/food-photo evaluation. Offline photo recognition would not make remote Trio telemetry available offline. The existing app still requires fresh clinical data for a bolus recommendation.
