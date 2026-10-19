@@ -26,9 +26,10 @@ import Testing
         let enabled = try enable.applying(to: disabled)
         #expect(enabled.enabled)
         #expect(throws: (any Error).self) { try disable.applying(to: enabled) }
-        let status = Trio.PostMealSMBStatus(enabled: false, revision: id.uuidString, durationMinutes: 30)
+        let status = Trio.PostMealSMBStatus(enabled: false, revision: id.uuidString, durationMinutes: 30, blockedUntil: 1_800_001_800)
         let senderStatus = try JSONDecoder().decode(LoopFollow.PostMealSMBStatus.self, from: JSONEncoder().encode(status))
         #expect(senderStatus.revision == id.uuidString && !senderStatus.enabled && senderStatus.durationMinutes == 30)
+        #expect(senderStatus.blockedUntil == 1_800_001_800)
     }
 
     private let now = Date(timeIntervalSince1970: 1_800_000_000)

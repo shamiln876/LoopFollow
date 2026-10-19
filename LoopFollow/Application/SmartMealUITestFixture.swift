@@ -48,7 +48,8 @@
                                 configuration: config, receipts: [])
             if ProcessInfo.processInfo.arguments.contains("--post-meal-smb-ui-test") {
                 s.smartMeal?.postMealSMB = .init(enabled: !ProcessInfo.processInfo.arguments.contains("--post-meal-smb-disabled"),
-                                               revision: "initial", durationMinutes: 30)
+                                                 revision: "initial", durationMinutes: 30,
+                                                 blockedUntil: ProcessInfo.processInfo.arguments.contains("--post-meal-smb-disabled") ? nil : now.addingTimeInterval(1800).timeIntervalSince1970)
             }
             if ProcessInfo.processInfo.arguments.contains("--smart-meal-low-forecast") {
                 s.minPredMgdl = 65; s.minGuardMgdl = 29; s.eventualMgdl = 107

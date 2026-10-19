@@ -22,6 +22,7 @@ final class SmartMealHandoffUITests: XCTestCase {
             } else {
                 XCTAssertTrue(toggle.waitForExistence(timeout: 10))
                 XCTAssertEqual(toggle.value as? String, mode == "on" ? "1" : "0")
+                XCTAssertEqual(app.staticTexts["post-meal-smb-until"].exists, mode == "on")
             }
             app.terminate()
         }

@@ -113,9 +113,16 @@ struct MealView: View {
                                 get: { state.enabled },
                                 set: { sendPostMealSMBSetting(enabled: $0, revision: state.revision) }
                             ))
-                            .disabled(smbSettingSending)
-                            .accessibilityIdentifier("post-meal-smb-toggle")
+                                .disabled(smbSettingSending)
+                                .accessibilityIdentifier("post-meal-smb-toggle")
                             Text("Trio reports: \(state.enabled ? "enabled" : "disabled"). Basal and manual boluses continue.").font(.footnote)
+                            if state.enabled, let until = state.blockedUntil, until > Date().timeIntervalSince1970 {
+                                Text("SMBs blocked until \(Date(timeIntervalSince1970: until), style: .time)")
+                                    .font(.footnote)
+                                    .accessibilityIdentifier("post-meal-smb-until")
+                            } else {
+                                Text("No active post-meal block reported.").font(.footnote)
+                            }
                             if let pendingSMBSetting, state.revision == pendingSMBSetting.uuidString {
                                 Text("Trio confirmed the setting.").font(.footnote)
                             } else if pendingSMBSetting != nil {
@@ -541,7 +548,7 @@ struct MealView: View {
         }
         isLoading = true
 
-        var scheduledDate: Date? = nil
+        var scheduledDate: Date?
         if isScheduling, let selectedTime = selectedTime {
             let calendar = Calendar.current
             let now = Date()
