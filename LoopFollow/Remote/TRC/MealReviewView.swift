@@ -353,11 +353,11 @@ struct MealReviewView: View {
                 Button {
                     useRecommendation(full: result.rounded)
                 } label: {
-                    Text("Use these values · \(selected.plan.immediateCarbs) g + \(units(selected.plan.upfrontInsulin))")
+                    Text("Next: Review & Send · \(selected.plan.immediateCarbs) g + \(units(selected.plan.upfrontInsulin))")
                         .frame(maxWidth: .infinity)
                 }
                 .accessibilityIdentifier("advisor-review-meal")
-                Text("Opens editable Meal. Nothing is sent until you confirm.").font(.caption)
+                Text("NOT DELIVERED YET. Next screen: tap Send Meal, Confirm, then complete Face ID. Check Trio pump history afterward.").font(.caption)
             } else if needsSettings {
                 Text("Insulin transfer needs current Trio settings. The Trio receiver update uploads them automatically; older Trio builds need a manual check.")
                     .font(.caption).fixedSize(horizontal: false, vertical: true)
