@@ -8,6 +8,9 @@ import SwiftUI
 struct MealView: View {
     @Environment(\.presentationMode) private var presentationMode
     @State private var showMealReview = false
+    @State private var confirmAdvisorAfterDismiss = false
+    @State private var didOpenAdvisor = false
+    private let launchAdvisorOnAppear: Bool
     @State private var advisorDraft: SmartMealDraft?
     @State private var advisorAttempted = false
     @ObservedObject private var liveMealSnapshot = Observable.shared.mealReview
@@ -43,7 +46,8 @@ struct MealView: View {
     @State private var isScheduling: Bool = false
     @State private var showFatProteinOrderBanner = false
 
-    init(initialAdvisorDraft: SmartMealDraft? = nil) {
+    init(initialAdvisorDraft: SmartMealDraft? = nil, launchAdvisorOnAppear: Bool = false) {
+        self.launchAdvisorOnAppear = launchAdvisorOnAppear
         _advisorDraft = State(initialValue: initialAdvisorDraft)
         if let draft = initialAdvisorDraft {
             _carbs = State(initialValue: HKQuantity(unit: .gram(), doubleValue: Double(draft.plan.immediateCarbs)))
@@ -278,7 +282,13 @@ struct MealView: View {
                 .navigationTitle("Meal")
                 .navigationBarTitleDisplayMode(.inline)
             }
-            .sheet(isPresented: $showMealReview) {
+            .sheet(isPresented: $showMealReview, onDismiss: {
+                if confirmAdvisorAfterDismiss {
+                    confirmAdvisorAfterDismiss = false
+                    alertType = .confirmMeal
+                    showAlert = true
+                }
+            }) {
                 MealReviewView(initialCarbs: advisorDraft.map { Double($0.plan.immediateCarbs + $0.plan.delayedCarbs) } ?? carbs.doubleValue(for: .gram()), initialBolus: advisorDraft.flatMap { draft in
                     let current = bolusAmount.doubleValue(for: .internationalUnit())
                     return draft.plan.usesManualBolus || current != draft.plan.upfrontInsulin ? current : nil
@@ -291,6 +301,10 @@ struct MealView: View {
                     bolusAmount = HKQuantity(unit: .internationalUnit(), doubleValue: draft.plan.upfrontInsulin)
                     isScheduling = false
                     selectedTime = nil
+                    // Present the EXISTING dose confirmation immediately after the
+                    // advisor sheet closes. No second "Send Meal" tap is needed.
+                    confirmAdvisorAfterDismiss = true
+                    showMealReview = false
                 })
             }
             .onChange(of: liveMealSnapshot.value) { _, _ in
@@ -300,6 +314,10 @@ struct MealView: View {
             .onAppear {
                 selectedTime = nil
                 isScheduling = false
+                if launchAdvisorOnAppear, !didOpenAdvisor {
+                    didOpenAdvisor = true
+                    showMealReview = true
+                }
 
                 quickPickMeals.refresh(
                     maxCarbs: maxCarbs.value.doubleValue(for: .gram()),
@@ -347,6 +365,13 @@ struct MealView: View {
 
                     if bolusAmount > 0 {
                         message += String(format: "\nBolus: %.2f U", bolusAmount)
+                    }
+                    // No separate forecast-blocking alert. Include the advisory
+                    // within the existing dose confirmation before authentication.
+                    if let draft = advisorDraft, let minPred = draft.snapshot.minPredMgdl,
+                       let minGuard = draft.snapshot.minGuardMgdl, (minPred < 70 || minGuard < 70)
+                    {
+                        message += "\nTrio forecasts a low. Review current glucose, trend and IOB before approving."
                     }
 
                     return Alert(
@@ -434,7 +459,7 @@ struct MealView: View {
                                   snapshot: Observable.shared.mealReview.value, source: Storage.shared.url.value),
                   MealReviewCalculation.reasons(snapshot: Observable.shared.mealReview.value,
                                                 samples: Observable.shared.mealReviewGlucose.value,
-                                                newestTreatment: Observable.shared.mealReviewNewestTreatment.value, now: current).isEmpty,
+                                                newestTreatment: Observable.shared.mealReviewNewestTreatment.value, now: current, allowReviewedLowForecast: true).isEmpty,
                   carbs.doubleValue(for: .gram()) == Double(draft.plan.immediateCarbs),
                   bolusAmount.doubleValue(for: .internationalUnit()) <= maxBolus.value.doubleValue(for: .internationalUnit()),
                   bolusAmount.doubleValue(for: .internationalUnit()) >= 0,
@@ -454,7 +479,7 @@ struct MealView: View {
                 smartRequest = SmartMealDelivery.request(draft: draft, bolus: bolusAmount.doubleValue(for: .internationalUnit()),
                                                          protein: protein.doubleValue(for: .gram()), fat: fat.doubleValue(for: .gram()),
                                                          snapshot: liveMealSnapshot.value, settings: Storage.shared.mealReviewSettings.value,
-                                                         bundleID: Storage.shared.bundleId.value, now: current)
+                                                         bundleID: Storage.shared.bundleId.value, now: current, acknowledgedLowForecast: true)
                 guard smartRequest != nil else {
                     alertMessage = "Smart meal held: invalid meal values or changed receiver settings. Review again. Nothing sent."
                     alertType = .validationError; showAlert = true; return
