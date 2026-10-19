@@ -46,6 +46,8 @@ jobs:
       - name: Prepare the simulator before test launch
         run: xcrun simctl bootstatus '${{ steps.simulator.outputs.id }}' -b
       - name: Compile native API and exercise synthetic review and cancellation
+        env:
+          PLATE_SCANNER_CI_SKIP_FORMAT: '1'
         run: |
           set -o pipefail
           xcodebuild -workspace LoopFollow.xcworkspace -scheme SmartMealUI \
