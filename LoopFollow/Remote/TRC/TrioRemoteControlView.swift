@@ -20,7 +20,7 @@ struct TrioRemoteControlView: View {
                 ]
 
                 LazyVGrid(columns: columns, spacing: 16) {
-                    CommandButtonView(command: "Meal", iconName: "fork.knife", destination: MealView())
+                    CommandButtonView(command: "Smart Meal", iconName: "fork.knife", destination: MealView(launchAdvisorOnAppear: true))
                     CommandButtonView(command: "Bolus", iconName: "syringe", destination: BolusView())
                     CommandButtonView(command: "Temp Target", iconName: "scope", destination: TempTargetView(), isActive: activeTempTarget.value != nil)
                     CommandButtonView(command: "Overrides", iconName: "slider.horizontal.3", destination: OverrideView(), isActive: activeOverrideNote.value != nil)
