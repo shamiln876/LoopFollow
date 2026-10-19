@@ -1,0 +1,43 @@
+name: Remote meal safety isolated iOS compile
+
+on:
+  push:
+    branches:
+      - fix/remote-meal-ack-safety-20261019
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  simulator-build:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - name: Choose Xcode
+        run: |
+          if [ -d /Applications/Xcode_26.2.app ]; then
+            sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
+          fi
+          xcodebuild -version
+      - name: Compile unsigned simulator app (no pump)
+        run: |
+          set -o pipefail
+          xcodebuild -workspace LoopFollow.xcworkspace \
+            -scheme LoopFollow -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build 2>&1 | tee /tmp/loopfollow-remote-safety-build.log
+      - name: Show compilation errors
+        if: failure()
+        run: |
+          grep -nE 'error:|BUILD FAILED|Undefined symbol' /tmp/loopfollow-remote-safety-build.log | tail -n 90 || true
+      - name: Retain failed build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-safety-compile-errors
+          path: /tmp/loopfollow-remote-safety-build.log
+          retention-days: 3
