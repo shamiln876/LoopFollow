@@ -24,7 +24,7 @@ enum SmartMealDelivery {
         return true
     }
 
-    static func request(draft: SmartMealDraft, bolus: Double, protein: Double, fat: Double, snapshot: MealReviewSnapshot?, settings: MealReviewSettings?, bundleID: String, now: Date) -> SmartMealRequest? {
+    static func request(draft: SmartMealDraft, bolus: Double, protein: Double, fat: Double, snapshot: MealReviewSnapshot?, settings: MealReviewSettings?, bundleID: String, now: Date, acknowledgedLowForecast: Bool = false) -> SmartMealRequest? {
         guard draft.isCurrent(now: now, settings: settings, snapshot: snapshot, source: draft.source),
               available(snapshot: snapshot, settings: settings, bundleID: bundleID, now: now),
               let status = snapshot?.smartMeal,
@@ -35,12 +35,20 @@ enum SmartMealDelivery {
               let full = Decimal(string: String(draft.plan.fullRecommendation)),
               let percent = Decimal(string: String(draft.plan.upfrontPercent)),
               let amount = Decimal(string: String(bolus)) else { return nil }
-        let request = SmartMealRequest(id: draft.transactionID, confirmedAt: now.timeIntervalSince1970,
+        var request = SmartMealRequest(id: draft.transactionID, confirmedAt: now.timeIntervalSince1970,
                                        calculationAt: status.calculationAt, configurationID: status.configuration.identifier,
                                        immediateCarbs: draft.plan.immediateCarbs, delayedCarbs: draft.plan.delayedCarbs,
                                        delaySeconds: draft.plan.delayedCarbs > 0 ? Int((draft.plan.delayMinutes * 60).rounded()) : 0,
                                        fullRecommendation: full, upfrontPercent: percent, bolusAmount: amount,
                                        includeFatProtein: protein > 0 || fat > 0, protein: Int(protein), fat: Int(fat))
+        // Only the final, authenticated confirmation can acknowledge a mild low
+        // forecast. The receiver independently refuses actual lows and severe predictions.
+        if acknowledgedLowForecast, status.allowsLowPredictionReview == true,
+           let minimum = snapshot?.minPredMgdl, let guardMinimum = snapshot?.minGuardMgdl,
+           minimum >= 54, (minimum < 70 || guardMinimum < 70)
+        {
+            request.lowPredictionAcknowledged = true
+        }
         return (try? request.validate(configuration: status.configuration, now: now)) != nil ? request : nil
     }
 }
