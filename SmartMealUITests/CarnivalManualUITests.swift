@@ -27,7 +27,8 @@ final class CarnivalManualUITests: XCTestCase {
         scanner.tap()
         let upload = app.buttons["plate-upload"]
         XCTAssertTrue(upload.waitForExistence(timeout: 10))
-        XCTAssertFalse(upload.isEnabled)
+        // Native model availability varies by OS/device; cancellation must work in either state.
+        XCTAssertTrue(app.staticTexts["plate-device-status"].waitForExistence(timeout: 10))
         app.buttons["Cancel"].tap()
 
         let search = app.textFields["Search Carnival foods"]
