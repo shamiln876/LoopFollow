@@ -359,7 +359,8 @@ struct MealReviewView: View {
         guard reviewed.isCurrent(now: now, settings: settings.value, snapshot: snapshot.value, source: source.value),
               SmartMealDraft.prefillReasons(settings: settings.value, snapshot: snapshot.value, source: source.value,
                                             samples: history.value, newestTreatment: newestTreatment.value, now: now,
-                                            allowLowPredictionReview: true).isEmpty else {
+                                            allowLowPredictionReview: true).isEmpty
+        else {
             pendingForecastDraft = nil
             forecastReviewError = "The live inputs changed while this warning was open. Review the updated values, or open manual Meal."
             return

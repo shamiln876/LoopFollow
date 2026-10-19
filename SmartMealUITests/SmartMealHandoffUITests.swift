@@ -25,7 +25,9 @@ final class SmartMealHandoffUITests: XCTestCase {
         let entry = app.buttons["fixture-percentage-advisor"]
         XCTAssertTrue(entry.waitForExistence(timeout: 30)); entry.tap()
         let dose = app.textFields["advisor-edit-bolus"]
-        for _ in 0 ..< 4 where !dose.isHittable { app.swipeUp() }
+        for _ in 0 ..< 4 where !dose.isHittable {
+            app.swipeUp()
+        }
         XCTAssertTrue(dose.waitForExistence(timeout: 10)); dose.tap()
         dose.typeText("0.65")
         app.buttons["Hide keyboard"].firstMatch.tap()
@@ -39,7 +41,9 @@ final class SmartMealHandoffUITests: XCTestCase {
         XCTAssertTrue(warning.waitForExistence(timeout: 5))
         warning.buttons["Accept and continue"].tap()
         let mealDose = app.textFields["meal-input-bolus-amount"]
-        for _ in 0 ..< 5 where !mealDose.isHittable { app.swipeUp() }
+        for _ in 0 ..< 5 where !mealDose.isHittable {
+            app.swipeUp()
+        }
         XCTAssertTrue(mealDose.waitForExistence(timeout: 10))
         XCTAssertEqual(mealDose.value as? String, "0.65")
         XCTAssertTrue(app.buttons["Send Meal"].exists)
@@ -58,11 +62,15 @@ final class SmartMealHandoffUITests: XCTestCase {
         let manual = app.buttons["advisor-manual-meal"]
         XCTAssertTrue(manual.waitForExistence(timeout: 10)); manual.tap()
         let mealCarbs = app.textFields["meal-input-carbs"]
-        for _ in 0 ..< 5 where !mealCarbs.isHittable { app.swipeUp() }
+        for _ in 0 ..< 5 where !mealCarbs.isHittable {
+            app.swipeUp()
+        }
         XCTAssertTrue(mealCarbs.waitForExistence(timeout: 10))
         XCTAssertEqual(mealCarbs.value as? String, "20")
         let dose = app.textFields["meal-input-bolus-amount"]
-        for _ in 0 ..< 3 where !dose.isHittable { app.swipeUp() }
+        for _ in 0 ..< 3 where !dose.isHittable {
+            app.swipeUp()
+        }
         XCTAssertTrue(dose.exists)
         XCTAssertTrue(["0", "0.00", "0,00"].contains(dose.value as? String ?? ""))
         app.terminate()

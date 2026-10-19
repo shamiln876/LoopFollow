@@ -72,7 +72,7 @@ import Testing
         let effects = Effects()
         let receipt = try await receiver.execute(decoded, now: now, validate: {
             guard Trio.SmartMealForecastPolicy.permits(glucose: 140, minimum: 65, guardMinimum: 29,
-                                                      bolus: decoded.bolusAmount, acknowledged: decoded.lowPredictionAcknowledged == true)
+                                                       bolus: decoded.bolusAmount, acknowledged: decoded.lowPredictionAcknowledged == true)
             else { throw Trio.SmartMealError.contextChanged }
         }, store: { await effects.store(decoded) }, bolus: { await effects.bolus(decoded.bolusAmount) })
         #expect(receipt.phase == .accepted)
