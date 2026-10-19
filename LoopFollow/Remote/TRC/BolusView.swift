@@ -182,8 +182,9 @@ struct BolusView: View {
                                         self.alertType = .validation
                                         self.showAlert = true
                                     case .canceled:
-                                        // User canceled, no alert
-                                        break
+                                        self.alertMessage = "Authentication canceled. No bolus command was submitted."
+                                        self.alertType = .validation
+                                        self.showAlert = true
                                     }
                                 }
                             }
@@ -192,7 +193,7 @@ struct BolusView: View {
                     )
                 case .statusSuccess:
                     return Alert(
-                        title: Text("Command Sent"),
+                        title: Text("Delivery NOT Confirmed"),
                         message: Text(statusMessage ?? ""),
                         dismissButton: .default(Text("OK"), action: {
                             presentationMode.wrappedValue.dismiss()
@@ -362,7 +363,7 @@ struct BolusView: View {
                     if sentUnits > 0 {
                         QuickPickBolusesManager.shared.recordBolus(units: sentUnits)
                     }
-                    statusMessage = RemoteCommandMessage.sent
+                    statusMessage = "Apple accepted the remote bolus request, but actual pump delivery has NOT been verified. Check Trio's pump bolus history and current IOB. Do NOT repeat the command until you confirm what was delivered."
                     LogManager.shared.log(
                         category: .apns,
                         message: "sendBolusPushNotification succeeded - Bolus: \(InsulinFormatter.shared.string(bolusAmount)) U"
@@ -370,7 +371,7 @@ struct BolusView: View {
                     bolusAmount = HKQuantity(unit: .internationalUnit(), doubleValue: 0.0)
                     alertType = .statusSuccess
                 } else {
-                    statusMessage = errorMessage ?? "Failed to send bolus command."
+                    statusMessage = (errorMessage ?? "Could not verify bolus command submission.") + " Delivery status is uncertain. Check actual pump bolus history before retrying; never repeat blindly."
                     LogManager.shared.log(
                         category: .apns,
                         message: "sendBolusPushNotification failed with error: \(errorMessage ?? "unknown error")"
