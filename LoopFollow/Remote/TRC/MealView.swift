@@ -113,8 +113,8 @@ struct MealView: View {
                                 get: { state.enabled },
                                 set: { sendPostMealSMBSetting(enabled: $0, revision: state.revision) }
                             ))
-                                .disabled(smbSettingSending)
-                                .accessibilityIdentifier("post-meal-smb-toggle")
+                            .disabled(smbSettingSending)
+                            .accessibilityIdentifier("post-meal-smb-toggle")
                             Text("Trio reports: \(state.enabled ? "enabled" : "disabled"). Basal and manual boluses continue.").font(.footnote)
                             if state.enabled, let until = state.blockedUntil, until > Date().timeIntervalSince1970 {
                                 Text("SMBs blocked until \(Date(timeIntervalSince1970: until), style: .time)")
