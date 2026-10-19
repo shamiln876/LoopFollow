@@ -333,6 +333,14 @@ class PushNotificationManager {
                     completion(false, "Failed to get a valid HTTP response.")
                 }
             }
+            // Persist an unverified-delivery reminder before sending an insulin/meal
+            // push. Network/APNs acceptance is not proof of pump or carb enactment.
+            switch payload.commandType {
+            case .bolus, .meal, .smartMeal:
+                RemoteDeliveryUnverified.record(kind: payload.commandType.rawValue)
+            default:
+                break
+            }
             task.resume()
 
         } catch {
