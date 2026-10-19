@@ -18,6 +18,131 @@ final class SmartMealHandoffUITests: XCTestCase {
         exercisePercentageControl(rice: false, linked: false)
     }
 
+    func testLowForecastRequiresAcceptAndPreservesEditedDose() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--smart-meal-ui-test", "--smart-meal-percentage-test", "--smart-meal-low-forecast"]
+        app.launch()
+        let entry = app.buttons["fixture-percentage-advisor"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 30)); entry.tap()
+        let dose = app.textFields["advisor-edit-bolus"]
+        for _ in 0 ..< 4 where !dose.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(dose.waitForExistence(timeout: 10)); dose.tap()
+        dose.typeText("0.65")
+        app.buttons["Hide keyboard"].firstMatch.tap()
+        let use = app.buttons["advisor-review-meal"]
+        XCTAssertTrue(use.isEnabled); use.tap()
+        let warning = app.alerts["Review low forecast"]
+        XCTAssertTrue(warning.waitForExistence(timeout: 5))
+        warning.buttons["Cancel"].tap()
+        XCTAssertTrue(use.waitForExistence(timeout: 5))
+        XCTAssertEqual(dose.value as? String, "0.65")
+        use.tap()
+        XCTAssertTrue(warning.waitForExistence(timeout: 5))
+        warning.buttons["Accept and continue"].tap()
+        let mealDose = app.textFields["meal-input-bolus-amount"]
+        for _ in 0 ..< 5 where !mealDose.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(mealDose.waitForExistence(timeout: 10))
+        XCTAssertEqual(mealDose.value as? String, "0.65")
+        XCTAssertTrue(app.buttons["Send Meal"].exists)
+        app.terminate()
+    }
+
+    func testManualMealRemainsAvailableDuringVeryLowForecast() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--smart-meal-ui-test", "--smart-meal-very-low-forecast"]
+        app.launch()
+        let home = app.buttons["home-meal-dashboard"]
+        XCTAssertTrue(home.waitForExistence(timeout: 30)); home.tap()
+        let carbs = app.textFields["advisor-meal-carbs"]
+        XCTAssertTrue(carbs.waitForExistence(timeout: 10)); carbs.tap(); carbs.typeText("20")
+        app.buttons["Hide keyboard"].firstMatch.tap()
+        let manual = app.buttons["advisor-manual-meal"]
+        XCTAssertTrue(manual.waitForExistence(timeout: 10)); manual.tap()
+        let mealCarbs = app.textFields["meal-input-carbs"]
+        for _ in 0 ..< 5 where !mealCarbs.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(mealCarbs.waitForExistence(timeout: 10))
+        XCTAssertEqual(mealCarbs.value as? String, "20")
+        let dose = app.textFields["meal-input-bolus-amount"]
+        for _ in 0 ..< 3 where !dose.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(dose.exists)
+        XCTAssertTrue(["0", "0.00", "0,00"].contains(dose.value as? String ?? ""))
+        app.terminate()
+    }
+
+    func testOptionalScannerRequiresReviewAndUnknownResolution() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--smart-meal-ui-test", "--plate-scanner-ui-test"]
+        app.launch()
+        let entry = app.buttons["home-meal-dashboard"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 30)); entry.tap()
+        app.buttons["advisor-scan-plate"].tap()
+        let accept = app.buttons["plate-scan-accept"]
+        for _ in 0 ..< 4 where !accept.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(accept.waitForExistence(timeout: 10)); XCTAssertFalse(accept.isEnabled)
+        let remove = app.buttons.matching(identifier: "Remove food")
+        XCTAssertEqual(remove.count, 2)
+        remove.element(boundBy: 1).tap()
+        app.buttons["Add food"].tap()
+        let search = app.textFields["plate-match-query"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("Bagel Plain")
+        app.buttons["plate-match-MG8D7CE49"].tap()
+        let addedRemove = app.buttons.matching(identifier: "Remove food")
+        for _ in 0 ..< 4 where !addedRemove.element(boundBy: 1).isHittable {
+            app.swipeUp()
+        }
+        XCTAssertEqual(addedRemove.count, 2)
+        addedRemove.element(boundBy: 1).tap()
+        let increase = app.buttons["Increase portion"].firstMatch
+        for _ in 0 ..< 4 where !increase.isHittable {
+            app.swipeDown()
+        }
+        increase.tap()
+        XCTAssertTrue(app.staticTexts["Estimated carbs: 39 g"].exists)
+        app.buttons["Decrease portion"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Estimated carbs: 26 g"].exists)
+        let confirm = app.switches["I checked this match and portion"]
+        for _ in 0 ..< 4 where !confirm.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        for _ in 0 ..< 4 where !accept.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(accept.isEnabled)
+        let capture = XCTAttachment(screenshot: app.screenshot()); capture.name = "Reviewed optional plate scanner"; capture.lifetime = .keepAlways; add(capture)
+        accept.tap()
+        XCTAssertTrue(app.textFields["advisor-meal-carbs"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.textFields["advisor-meal-carbs"].value as? String, "26")
+        app.terminate()
+    }
+
+    func testDirectPhotoCancellationKeepsAdvisorCarbs() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--smart-meal-ui-test"]
+        app.launch()
+        let entry = app.buttons["home-meal-dashboard"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 30)); entry.tap()
+        let carbs = app.textFields["advisor-meal-carbs"]
+        carbs.tap(); carbs.typeText("42"); hideKeyboard(app)
+        app.buttons["advisor-scan-plate"].tap()
+        XCTAssertTrue(app.staticTexts["plate-device-status"].waitForExistence(timeout: 10))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(carbs.waitForExistence(timeout: 10))
+        XCTAssertEqual(carbs.value as? String, "42")
+        app.terminate()
+    }
+
     private func exercisePercentageControl(rice: Bool, linked: Bool = true) {
         let app = XCUIApplication()
         app.launchArguments = ["--smart-meal-ui-test", "--smart-meal-percentage-test"]

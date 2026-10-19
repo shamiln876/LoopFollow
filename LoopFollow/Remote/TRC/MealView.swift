@@ -43,13 +43,15 @@ struct MealView: View {
     @State private var isScheduling: Bool = false
     @State private var showFatProteinOrderBanner = false
 
-    init(initialAdvisorDraft: SmartMealDraft? = nil) {
+    init(initialAdvisorDraft: SmartMealDraft? = nil, initialCarbs: Double = 0) {
         _advisorDraft = State(initialValue: initialAdvisorDraft)
         if let draft = initialAdvisorDraft {
             _carbs = State(initialValue: HKQuantity(unit: .gram(), doubleValue: Double(draft.plan.immediateCarbs)))
             _protein = State(initialValue: HKQuantity(unit: .gram(), doubleValue: draft.protein))
             _fat = State(initialValue: HKQuantity(unit: .gram(), doubleValue: draft.fat))
             _bolusAmount = State(initialValue: HKQuantity(unit: .internationalUnit(), doubleValue: draft.plan.upfrontInsulin))
+        } else if initialCarbs.isFinite, initialCarbs >= 0 {
+            _carbs = State(initialValue: HKQuantity(unit: .gram(), doubleValue: initialCarbs))
         }
     }
 
@@ -282,7 +284,15 @@ struct MealView: View {
                 MealReviewView(initialCarbs: advisorDraft.map { Double($0.plan.immediateCarbs + $0.plan.delayedCarbs) } ?? carbs.doubleValue(for: .gram()), initialBolus: advisorDraft.flatMap { draft in
                     let current = bolusAmount.doubleValue(for: .internationalUnit())
                     return draft.plan.usesManualBolus || current != draft.plan.upfrontInsulin ? current : nil
-                }, initialPlan: advisorDraft?.plan, onUse: { draft in
+                }, initialPlan: advisorDraft?.plan, onManualMeal: { amount in
+                    advisorDraft = nil
+                    carbs = HKQuantity(unit: .gram(), doubleValue: amount)
+                    protein = HKQuantity(unit: .gram(), doubleValue: 0)
+                    fat = HKQuantity(unit: .gram(), doubleValue: 0)
+                    bolusAmount = HKQuantity(unit: .internationalUnit(), doubleValue: 0)
+                    isScheduling = false
+                    selectedTime = nil
+                }, onUse: { draft in
                     advisorDraft = draft
                     advisorAttempted = false
                     carbs = HKQuantity(unit: .gram(), doubleValue: Double(draft.plan.immediateCarbs))
@@ -433,7 +443,8 @@ struct MealView: View {
                                   snapshot: Observable.shared.mealReview.value, source: Storage.shared.url.value),
                   MealReviewCalculation.reasons(snapshot: Observable.shared.mealReview.value,
                                                 samples: Observable.shared.mealReviewGlucose.value,
-                                                newestTreatment: Observable.shared.mealReviewNewestTreatment.value, now: current).isEmpty,
+                                                newestTreatment: Observable.shared.mealReviewNewestTreatment.value, now: current,
+                                                allowLowPredictionReview: draft.lowPredictionAcknowledged && Observable.shared.mealReview.value?.smartMeal?.allowsLowPredictionReview == true).isEmpty,
                   carbs.doubleValue(for: .gram()) == Double(draft.plan.immediateCarbs),
                   bolusAmount.doubleValue(for: .internationalUnit()) <= maxBolus.value.doubleValue(for: .internationalUnit()),
                   bolusAmount.doubleValue(for: .internationalUnit()) >= 0,

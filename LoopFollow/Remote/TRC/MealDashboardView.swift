@@ -16,10 +16,12 @@ struct MealDashboardHomeCard: View {
     @State private var presented = false
     @State private var tempTargetPresented = false
     @State private var mealRoute: MealRoute?
+    @State private var manualCarbs: Double?
 
     private struct MealRoute: Identifiable {
         let id = UUID()
         let draft: SmartMealDraft?
+        var manualCarbs: Double = 0
     }
 
     @State private var advisorDraft: SmartMealDraft?
@@ -29,7 +31,7 @@ struct MealDashboardHomeCard: View {
             let now = Date()
             let status = MealDashboardStatus(snapshot: snapshot.value, samples: history.value, newestTreatment: newestTreatment.value, settings: settings.value, source: source.value, now: now)
             VStack(spacing: 4) {
-                Button { advisorDraft = nil; presented = true } label: {
+                Button { advisorDraft = nil; manualCarbs = nil; presented = true } label: {
                     MealDashboardHomeLabel(status: status, snapshot: snapshot.value, now: now)
                 }
                 .buttonStyle(.plain)
@@ -52,10 +54,11 @@ struct MealDashboardHomeCard: View {
             }
             .sheet(isPresented: $presented, onDismiss: {
                 if let advisorDraft { mealRoute = MealRoute(draft: advisorDraft) }
+                else if let manualCarbs { mealRoute = MealRoute(draft: nil, manualCarbs: manualCarbs) }
             }) {
-                MealReviewView(initialCarbs: 0, onUse: { advisorDraft = $0 })
+                MealReviewView(initialCarbs: 0, onManualMeal: { manualCarbs = $0 }, onUse: { advisorDraft = $0 })
             }
-            .sheet(item: $mealRoute) { route in MealView(initialAdvisorDraft: route.draft) }
+            .sheet(item: $mealRoute) { route in MealView(initialAdvisorDraft: route.draft, initialCarbs: route.manualCarbs) }
             .sheet(isPresented: $tempTargetPresented) { TempTargetView(showsCloseButton: true) }
         }
     }

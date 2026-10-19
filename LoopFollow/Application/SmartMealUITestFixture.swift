@@ -23,6 +23,7 @@
         @MainActor static func configure() {
             guard !configured else { return }
             configured = true
+            UserDefaults.standard.set("onDevice", forKey: "plateScannerProvider")
             let now = Date()
             let source = "https://example.invalid/smart-meal-ui-test"
             Storage.shared.url.value = source
@@ -45,6 +46,14 @@
             s.smartMeal = .init(protocolVersion: 1, generatedAt: now.timeIntervalSince1970,
                                 calculationAt: now.timeIntervalSince1970, bundleIdentifier: "test.trio", enabled: true,
                                 configuration: config, receipts: [])
+            if ProcessInfo.processInfo.arguments.contains("--smart-meal-low-forecast") {
+                s.minPredMgdl = 65; s.minGuardMgdl = 29; s.eventualMgdl = 107
+                s.smartMeal?.allowsLowPredictionReview = true
+            }
+            if ProcessInfo.processInfo.arguments.contains("--smart-meal-very-low-forecast") {
+                s.minPredMgdl = 53; s.minGuardMgdl = 29; s.eventualMgdl = 107
+                s.smartMeal?.allowsLowPredictionReview = true
+            }
             Observable.shared.mealReview.value = s
             Observable.shared.mealReviewGlucose.value = [.init(date: now.addingTimeInterval(-900), mgdl: 175), .init(date: now, mgdl: 180)]
             Observable.shared.mealReviewNewestTreatment.value = nil

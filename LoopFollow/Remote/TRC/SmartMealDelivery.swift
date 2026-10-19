@@ -35,12 +35,19 @@ enum SmartMealDelivery {
               let full = Decimal(string: String(draft.plan.fullRecommendation)),
               let percent = Decimal(string: String(draft.plan.upfrontPercent)),
               let amount = Decimal(string: String(bolus)) else { return nil }
-        let request = SmartMealRequest(id: draft.transactionID, confirmedAt: now.timeIntervalSince1970,
+        if bolus > 0 {
+            guard let minimum = snapshot?.minPredMgdl, minimum >= 54 else { return nil }
+            if MealReviewCalculation.lowPredictionNeedsReview(snapshot) {
+                guard status.allowsLowPredictionReview == true, draft.lowPredictionAcknowledged else { return nil }
+            }
+        }
+        var request = SmartMealRequest(id: draft.transactionID, confirmedAt: now.timeIntervalSince1970,
                                        calculationAt: status.calculationAt, configurationID: status.configuration.identifier,
                                        immediateCarbs: draft.plan.immediateCarbs, delayedCarbs: draft.plan.delayedCarbs,
                                        delaySeconds: draft.plan.delayedCarbs > 0 ? Int((draft.plan.delayMinutes * 60).rounded()) : 0,
                                        fullRecommendation: full, upfrontPercent: percent, bolusAmount: amount,
                                        includeFatProtein: protein > 0 || fat > 0, protein: Int(protein), fat: Int(fat))
+        request.lowPredictionAcknowledged = draft.lowPredictionAcknowledged ? true : nil
         return (try? request.validate(configuration: status.configuration, now: now)) != nil ? request : nil
     }
 }
