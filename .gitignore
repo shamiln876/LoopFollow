@@ -91,3 +91,4 @@ node_modules/
 
 # Local compilation evidence
 build-review/
+.wrangler/

@@ -85,4 +85,30 @@ struct PlateScanTests {
         for url in ["http://example.com/scan", "https://user:secret@example.com/scan", "https://example.com/scan?key=secret", "https://example.com/#secret", "nonsense"] { #expect(PlateScanClient.endpoint(url) == nil) }
         #expect(PlateScanClient.endpoint("https://example.com/scan") != nil)
     }
+
+    @Test func onDeviceLookupIsBoundedRelevantAndContainsNoNutrition() throws {
+        let guide = try catalog()
+        let matches = PlateScanLocalCatalog.matches("plain bagel", catalog: guide)
+        #expect(!matches.isEmpty && matches.count <= 4)
+        #expect(matches.contains { $0.id == "MG8D7CE49" })
+        let json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(matches)) as? [[String: Any]])
+        #expect(json.allSatisfy { Set($0.keys) == Set(["id", "name", "venue", "portion"]) })
+        #expect(PlateScanLocalCatalog.matches("the food on a plate", catalog: guide).isEmpty)
+        #expect(PlateScanLocalCatalog.matches("unidentifiablexyz", catalog: guide).isEmpty)
+    }
+
+    @Test func nativeMatchesMustHaveBeenOfferedAndUnknownsStayVisible() throws {
+        let guide = try catalog(), food = guide.foods.first { $0.available }!
+        let response = PlateScanResponse(sourceSHA256: guide.sourceSHA256, items: [
+            .init(label: "Unverified food", foodID: food.id, portions: 1, uncertainty: "Check preparation"),
+            .init(label: "Unknown sauce", foodID: nil, portions: nil, uncertainty: "Unknown ingredients"),
+        ])
+        let blocked = PlateScanLocalCatalog.ground(response, offeredIDs: [])
+        #expect(blocked.items.count == 2)
+        #expect(blocked.items.allSatisfy { $0.foodID == nil && $0.portions == nil })
+        #expect(try blocked.review(catalog: guide).allSatisfy { !$0.resolved && $0.portionNeedsEntry })
+        let offered = PlateScanLocalCatalog.ground(response, offeredIDs: [food.id])
+        #expect(offered.items[0].foodID == food.id)
+        #expect(offered.items[1].foodID == nil)
+    }
 }

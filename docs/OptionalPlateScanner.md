@@ -1,5 +1,26 @@
 # Optional plate scanner
 
+## Native iOS 27 integration (build 23 source)
+
+Smart Meal Advisor now has a direct **Scan plate photo** button. The default analysis mode is **This iPhone · Apple Intelligence**. It checks iOS 27, device eligibility, Apple Intelligence enablement and model readiness before allowing photo selection. The ordinary Carnival guide remains available without photo analysis. A device OS update alone does not add this feature to older installed builds.
+
+The native path explicitly uses `SystemLanguageModel.default` and the iOS 27 `Attachment(CGImage)` API. It never selects Private Cloud Compute or an external provider automatically. A bounded local catalog tool returns only IDs, food names, venues and exact base portions, with no nutrition or clinical telemetry. At most two tool calls, six queries per call and four candidates per query are permitted. All catalog matches must have been returned by that photo session's lookup; unoffered IDs are retained as unresolved foods. The model reports food labels, catalog IDs, base-portion multipliers and uncertainty, never carbs or insulin. Incomplete or invalid responses fail closed. Local grounding/review logic requires explicit match and portion confirmation. The existing catalog computes nutrition and the existing Advisor receives only the accepted reviewed meal.
+
+Photo cancellation preserves entered Advisor carbs. Both direct-Advisor and guide entry use the same scanner. A session ID prevents an older cancelled analysis from changing a newer photo's results or busy state. All image inputs are redrawn in memory to normalize orientation/remove metadata. A separate explicitly selected cloud-service mode retains the previous authenticated backend; native errors do not enable it or incur API costs.
+
+`PlateScanOnDevice.swift` compiles the native API only with Swift 6.4 / Xcode 27 and checks iOS 27 at runtime. Older SDK builds show an explicit unavailable message, not a simulated recognition result. The native CI job defines `PLATE_SCAN_REQUIRE_NATIVE`, so it fails rather than silently compiling out the API. Local Mac remains macOS 26.1 / Xcode 26.1.1 and the caregiver iPhone was read-only verified at iOS 26.5.1 during this change. Actual device recognition and portion accuracy remain untested until a compatible build and updated phone are available.
+
+The new `Native iOS 27 plate scanner` workflow uses GitHub's standard `xcode-27` runner, released Xcode 27, nine Swift model/transport/grounding tests, twelve mocked server/quota tests and three synthetic UI journeys. Results must be checked; source presence is not a successful native compile. LoopFollow's branch-targeted TestFlight workflow now also selects the Xcode 27 runner/SDK. No signing secrets, bundle IDs, entitlements, App Groups, clinical settings, Trio receiver or treatment transport were changed. The optional Trio dispatcher still pins older LoopFollow source; use the dedicated LoopFollow branch workflow for this feature.
+
+References:
+- https://developer.apple.com/documentation/foundationmodels/analyzing-images-with-multimodal-prompting
+- https://developer.apple.com/documentation/foundationmodels/expanding-generation-with-tool-calling
+- https://developer.apple.com/xcode/system-requirements
+- https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md
+
+## Earlier API implementation and verification history
+
+
 Branch `feature/optional-plate-scanner`, based on Smart Meal Advisor build 21 (`8c535de`).
 
 ## User workflow

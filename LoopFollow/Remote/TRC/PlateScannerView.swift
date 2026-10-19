@@ -5,8 +5,10 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-struct PlateScannerView: View {
+@MainActor struct PlateScannerView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("plateScannerProvider") private var provider = "onDevice"
     @AppStorage("plateScannerEndpoint") private var endpoint = ""
     @State private var token = PlateScanCredentials.read()
     @State private var photo: PhotosPickerItem?
@@ -17,6 +19,8 @@ struct PlateScannerView: View {
     @State private var error: String?
     @State private var task: Task<Void, Never>?
     @State private var showSetup = false
+    @State private var deviceStatus = PlateScanOnDevice.status
+    @State private var scanID: UUID?
     let catalog: CarnivalFoodCatalog
     let accept: (CarnivalMeal) -> Void
 
@@ -37,30 +41,40 @@ struct PlateScannerView: View {
         #endif
     }
 
-    private var ready: Bool { PlateScanClient.endpoint(endpoint) != nil && !token.isEmpty }
+    private var usesService: Bool { provider == "service" }
+    private var ready: Bool { usesService ? PlateScanClient.endpoint(endpoint) != nil && !token.isEmpty : deviceStatus.ready }
     private var meal: CarnivalMeal? { PlateScanReview.meal(items, catalog: catalog) }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Optional photo scanner") {
-                    Text("Only a photo you take or select here is sent to your configured AI service. Review every food and portion; sauces and hidden ingredients can be missed. No glucose or insulin data are sent.")
+                    Text(usesService ? "Only a photo you take or select here is sent to your configured AI service. No glucose or insulin data are sent." : "Analyze a photo on this iPhone with Apple Intelligence. Photos stay on your device, with no per-photo fee or scanner hosting account.")
                         .font(.footnote)
+                    Text("Review every food and portion; sauces and hidden ingredients can be missed.").font(.footnote)
                     PhotosPicker(selection: $photo, matching: .images) { Label("Upload photo", systemImage: "photo") }
                         .disabled(busy || !ready).accessibilityIdentifier("plate-upload")
                     if UIImagePickerController.isSourceTypeAvailable(.camera) {
                         Button { camera = true } label: { Label("Take photo", systemImage: "camera") }.disabled(busy || !ready)
                     }
-                    if !ready { Text("Live photo analysis is not configured. Close this screen to use the offline manual guide.").foregroundStyle(.secondary) }
-                    Button("Scanner setup") { showSetup.toggle() }.disabled(busy)
+                    if !usesService { Text(deviceStatus.message).font(.footnote).foregroundStyle(.secondary).accessibilityIdentifier("plate-device-status") }
+                    else if !ready { Text("Your optional cloud scanner needs a service URL and token. The manual food guide remains available.").foregroundStyle(.secondary) }
+                    Button("Photo analysis options") { showSetup.toggle() }.disabled(busy)
                     if showSetup {
-                        TextField("HTTPS scanner URL", text: $endpoint).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                        SecureField("Scanner access token", text: $token).textInputAutocapitalization(.never).autocorrectionDisabled()
-                        Button("Save setup") {
-                            if PlateScanCredentials.save(token) { showSetup = false }
-                            else { error = "Could not save the scanner token securely." }
+                        Picker("Analyze photos using", selection: $provider) {
+                            Text("This iPhone · Apple Intelligence").tag("onDevice")
+                            Text("My cloud scanner · may have fees").tag("service")
+                        }.disabled(busy)
+                        if usesService {
+                            TextField("HTTPS scanner URL", text: $endpoint).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                            SecureField("Scanner access token", text: $token).textInputAutocapitalization(.never).autocorrectionDisabled()
+                            Button("Save setup") {
+                                if PlateScanCredentials.save(token) { showSetup = false }
+                                else { error = "Could not save the scanner token securely." }
+                            }
+                            Text("Use a private service token here. The OpenAI API key belongs only in the server's secret store.").font(.footnote)
                         }
-                        Text("Use a private service token here. The OpenAI API key belongs only in the server's secret store.").font(.footnote)
+                        Text("On-device failures never switch to a paid service automatically.").font(.footnote)
                     }
                     if let image { Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 180).accessibilityLabel("Selected plate photo") }
                     if busy { ProgressView("Identifying foods and visible portions…") }
@@ -103,7 +117,9 @@ struct PlateScannerView: View {
                 } catch { self.error = "Could not open that photo. Try a smaller image." }
             }
         }
-        .onDisappear { task?.cancel() }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { deviceStatus = PlateScanOnDevice.status } }
+        .onChange(of: provider) { _, _ in items = []; image = nil; photo = nil; error = nil }
+        .onDisappear { scanID = nil; task?.cancel() }
     }
 
     /// Deleted rows may remain alive during Form animations/accessibility queries.
@@ -116,19 +132,27 @@ struct PlateScannerView: View {
 
     @MainActor private func analyze(_ selected: UIImage) {
         task?.cancel(); items = []; error = nil; busy = true
+        let identifier = UUID(); scanID = identifier
+        let useService = usesService
         // Redraw at a bounded size: strips EXIF/GPS metadata and normalizes orientation.
         let scale = min(1, 1280 / max(selected.size.width, selected.size.height))
         let size = CGSize(width: max(1, selected.size.width * scale), height: max(1, selected.size.height * scale))
         let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
         let normalized = UIGraphicsImageRenderer(size: size, format: format).image { _ in selected.draw(in: CGRect(origin: .zero, size: size)) }
         image = normalized
-        guard let jpeg = normalized.jpegData(compressionQuality: 0.8) else { busy = false; error = "Could not prepare that image."; return }
         task = Task { @MainActor in
-            defer { busy = false }
+            defer { if scanID == identifier { busy = false } }
             do {
-                let result = try await PlateScanClient.scan(jpeg: jpeg, endpoint: endpoint, token: token, catalog: catalog)
-                guard !Task.isCancelled else { return }; items = result
-            } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
+                let result: [PlateScanItem]
+                if useService {
+                    guard let jpeg = normalized.jpegData(compressionQuality: 0.8) else { throw PlateScanError.invalidResponse }
+                    result = try await PlateScanClient.scan(jpeg: jpeg, endpoint: endpoint, token: token, catalog: catalog)
+                } else {
+                    guard let cgImage = normalized.cgImage else { throw PlateScanDeviceError.incomplete }
+                    result = try await PlateScanOnDevice.scan(image: cgImage, catalog: catalog)
+                }
+                guard !Task.isCancelled, scanID == identifier else { return }; items = result
+            } catch { if !Task.isCancelled, scanID == identifier { self.error = error.localizedDescription } }
         }
     }
 }

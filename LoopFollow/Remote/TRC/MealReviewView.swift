@@ -24,6 +24,7 @@ struct MealReviewView: View {
     @State private var refreshAnchor = Date()
     @State private var settingsPresented = false
     @State private var foodPresented = false
+    @State private var platePresented = false
     @State private var foodMeal: CarnivalMeal?
     @State private var reviewSession = UUID()
     @State private var pendingAudit: DispatchWorkItem?
@@ -78,6 +79,9 @@ struct MealReviewView: View {
                         presetSection
                         if carbsFocused { Button("Hide keyboard") { carbsFocused = false; bolusFocused = false } }
                         Button("Carnival food & portions") { carbsFocused = false; foodPresented = true }
+                        Button { carbsFocused = false; platePresented = true } label: {
+                            Label("Scan plate photo", systemImage: "camera")
+                        }.accessibilityIdentifier("advisor-scan-plate")
                         if let foodMeal {
                             DisclosureGroup("Selected foods · \(foodMeal.items.count)") {
                                 ForEach(foodMeal.items) { item in
@@ -132,12 +136,13 @@ struct MealReviewView: View {
         .sheet(isPresented: $settingsPresented) { MealReviewSettingsView(saved: settings, source: source) }
         .sheet(isPresented: $foodPresented) {
             CarnivalFoodGuideView(initialMeal: foodMeal) { meal in
-                guard let total = meal.carbsForReview else { return }
-                foodMeal = meal
-                carbText = CarnivalNumber.text(total.rounded())
-                proteinText = meal.total(\.protein).map { CarnivalNumber.text($0.rounded()) } ?? ""
-                fatText = meal.total(\.fat).map { CarnivalNumber.text($0.rounded()) } ?? ""
-                sendFatProtein = false
+                applyFoodMeal(meal)
+            }
+        }
+        .sheet(isPresented: $platePresented) {
+            switch CarnivalFoodCatalog.bundled {
+            case let .success(catalog): PlateScannerView(catalog: catalog, accept: applyFoodMeal)
+            case .failure: Text("The food guide could not be verified. Use manual carb entry until the guide is restored.").padding()
             }
         }
         .onAppear { MealReviewSettingsImport.consumePending(); scheduleAudit() }
@@ -169,6 +174,15 @@ struct MealReviewView: View {
             recordAudit(kind: .reviewHidden)
             audit.flush()
         }
+    }
+
+    private func applyFoodMeal(_ meal: CarnivalMeal) {
+        guard let total = meal.carbsForReview else { return }
+        foodMeal = meal
+        carbText = CarnivalNumber.text(total.rounded())
+        proteinText = meal.total(\.protein).map { CarnivalNumber.text($0.rounded()) } ?? ""
+        fatText = meal.total(\.fat).map { CarnivalNumber.text($0.rounded()) } ?? ""
+        sendFatProtein = false
     }
 
     private var selectedPercent: Double? { Double(customPercent.replacingOccurrences(of: ",", with: ".")) }

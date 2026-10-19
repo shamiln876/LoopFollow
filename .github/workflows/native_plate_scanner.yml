@@ -1,0 +1,60 @@
+name: Native iOS 27 plate scanner
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'LoopFollow/Remote/TRC/PlateScan*'
+      - 'LoopFollow/Remote/TRC/MealReviewView.swift'
+      - 'Tests/PlateScanTests.swift'
+      - 'SmartMealUITests/**'
+      - '.github/workflows/native_plate_scanner.yml'
+permissions:
+  contents: read
+jobs:
+  native-scanner:
+    runs-on: xcode-27
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select released Xcode 27 SDK
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_27.app/Contents/Developer
+          xcodebuild -version
+          xcrun swift --version
+          xcrun --sdk iphonesimulator --show-sdk-version
+      - name: Test scanner grounding and review logic
+        run: bash Scripts/test-plate-scanner.sh
+      - name: Select an available iOS 27 simulator
+        id: simulator
+        run: |
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/plate-simulators.json"
+          python3 - <<'PY'
+          import json, os
+          with open(os.environ['RUNNER_TEMP']+'/plate-simulators.json') as f:
+              devices=json.load(f)['devices']
+          candidates=[d for runtime, items in devices.items() if '.iOS-27-' in runtime for d in items if d.get('isAvailable') and d['name'].startswith('iPhone')]
+          if not candidates:
+              raise SystemExit('No available iOS 27 iPhone simulator')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('id='+candidates[0]['udid']+'\n')
+          PY
+      - name: Compile native API and exercise synthetic review and cancellation
+        run: |
+          set -o pipefail
+          xcodebuild -workspace LoopFollow.xcworkspace -scheme SmartMealUI \
+            -configuration Debug -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
+            -derivedDataPath "$RUNNER_TEMP/plate-native-build" \
+            -resultBundlePath "$RUNNER_TEMP/plate-native.xcresult" \
+            -only-testing:SmartMealUITests/SmartMealHandoffUITests/testOptionalScannerRequiresReviewAndUnknownResolution \
+            -only-testing:SmartMealUITests/SmartMealHandoffUITests/testDirectPhotoCancellationKeepsAdvisorCarbs \
+            -only-testing:SmartMealUITests/CarnivalManualUITests/testManualHalfBagelStillFillsAdvisorAfterCancellingScanner \
+            'SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG PLATE_SCAN_REQUIRE_NATIVE' \
+            CODE_SIGNING_ALLOWED=NO test | tee "$RUNNER_TEMP/plate-native-build.log"
+      - name: Save build and synthetic UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-plate-scanner-checks
+          path: |
+            ${{ runner.temp }}/plate-native.xcresult
+            ${{ runner.temp }}/plate-native-build.log

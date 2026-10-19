@@ -4,7 +4,7 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/plate-scanner.XXXXXX")"
 trap 'rm -rf "$test_root"' EXIT
 mkdir -p "$test_root/Sources/LoopFollow" "$test_root/Tests/LoopFollowTests"
-cp "$repo_root/LoopFollow/Remote/TRC/PlateScan.swift" "$repo_root/LoopFollow/Remote/TRC/CarnivalFood.swift" "$test_root/Sources/LoopFollow/"
+cp "$repo_root/LoopFollow/Remote/TRC/PlateScan.swift" "$repo_root/LoopFollow/Remote/TRC/PlateScanLocalCatalog.swift" "$repo_root/LoopFollow/Remote/TRC/CarnivalFood.swift" "$test_root/Sources/LoopFollow/"
 cp "$repo_root/Tests/PlateScanTests.swift" "$test_root/Tests/LoopFollowTests/"
 cat > "$test_root/Package.swift" <<'PACKAGE'
 // swift-tools-version: 6.0

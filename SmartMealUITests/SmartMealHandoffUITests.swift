@@ -24,8 +24,7 @@ final class SmartMealHandoffUITests: XCTestCase {
         app.launch()
         let entry = app.buttons["home-meal-dashboard"]
         XCTAssertTrue(entry.waitForExistence(timeout: 30)); entry.tap()
-        app.buttons["Carnival food & portions"].tap()
-        app.buttons["carnival-photo-scanner"].tap()
+        app.buttons["advisor-scan-plate"].tap()
         let accept = app.buttons["plate-scan-accept"]
         for _ in 0 ..< 4 where !accept.isHittable {
             app.swipeUp()
@@ -66,6 +65,22 @@ final class SmartMealHandoffUITests: XCTestCase {
         accept.tap()
         XCTAssertTrue(app.textFields["advisor-meal-carbs"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.textFields["advisor-meal-carbs"].value as? String, "26")
+        app.terminate()
+    }
+
+    func testDirectPhotoCancellationKeepsAdvisorCarbs() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--smart-meal-ui-test"]
+        app.launch()
+        let entry = app.buttons["home-meal-dashboard"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 30)); entry.tap()
+        let carbs = app.textFields["advisor-meal-carbs"]
+        carbs.tap(); carbs.typeText("42"); hideKeyboard(app)
+        app.buttons["advisor-scan-plate"].tap()
+        XCTAssertTrue(app.staticTexts["plate-device-status"].waitForExistence(timeout: 10))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(carbs.waitForExistence(timeout: 10))
+        XCTAssertEqual(carbs.value as? String, "42")
         app.terminate()
     }
 
