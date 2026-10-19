@@ -272,14 +272,12 @@ class PushNotificationManager {
             switch payload.commandType {
             case .bolus, .meal, .smartMeal:
                 request.setValue("0", forHTTPHeaderField: "apns-expiration")
-                // No collapse ID: separate doses/meals must never silently replace each other.
             default:
                 request.setValue(String(Int(payload.timestamp + 600)), forHTTPHeaderField: "apns-expiration")
                 request.setValue(payload.commandType.rawValue, forHTTPHeaderField: "apns-collapse-id")
             }
             request.setValue(bundleId, forHTTPHeaderField: "apns-topic")
             request.setValue("alert", forHTTPHeaderField: "apns-push-type")
-
 
             request.httpBody = try JSONEncoder().encode(finalMessage)
 
