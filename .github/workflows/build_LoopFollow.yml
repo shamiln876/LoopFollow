@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: native-plate-testflight
   cancel-in-progress: false
@@ -49,6 +50,28 @@ jobs:
       - name: Verify native SDK and family app identity
         run: |
           python3 Scripts/verify-native-plate-ipa.py LoopFollow.ipa
+      - name: Require successful checks for this exact source before upload
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const required = ['.github/workflows/native_plate_scanner.yml',
+              '.github/workflows/plate_scanner_tests.yml', '.github/workflows/lint.yml'];
+            for (let attempt = 0; attempt < 20; attempt++) {
+              const {data} = await github.rest.actions.listWorkflowRunsForRepo({
+                owner: context.repo.owner, repo: context.repo.repo,
+                head_sha: context.sha, event: 'pull_request', per_page: 50
+              });
+              const checks = required.map(path => data.workflow_runs.find(run => run.path === path));
+              const failed = checks.find(run => run && run.status === 'completed' && run.conclusion !== 'success');
+              if (failed) throw new Error('Required check did not pass: ' + failed.html_url);
+              if (checks.every(run => run && run.status === 'completed' && run.conclusion === 'success')) {
+                core.info('All three required checks passed for ' + context.sha);
+                return;
+              }
+              core.info('Waiting for native scanner, scanner tests and lint checks');
+              await new Promise(resolve => setTimeout(resolve, 30000));
+            }
+            throw new Error('Required checks are incomplete; TestFlight upload blocked');
       - name: Upload to existing LoopFollow TestFlight app
         run: bundle exec fastlane release
       - name: Save build and distribution evidence
