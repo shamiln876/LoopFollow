@@ -7,6 +7,30 @@ import Testing
 @testable import Trio
 
 @Suite struct SmartMealIntegrationTests {
+    @Test func postMealSettingCrossesActualWireWithoutTreatments() throws {
+        let id = UUID()
+        let request = LoopFollow.PostMealSMBSettingRequest(id: id, expectedRevision: "initial", enabled: false)
+        let payload = LoopFollow.CommandPayload(user: "synthetic", commandType: .postMealSMB,
+                                                timestamp: 1_800_000_000, postMealSMB: request)
+        let decoded = try JSONDecoder().decode(Trio.CommandPayload.self, from: JSONEncoder().encode(payload))
+        #expect(decoded.commandType == .postMealSMB)
+        #expect(decoded.postMealSMB?.id == id)
+        #expect(decoded.postMealSMB?.enabled == false)
+        #expect(decoded.postMealSMB?.expectedRevision == "initial")
+        #expect(decoded.carbs == nil && decoded.smartMeal == nil && decoded.bolusAmount == nil)
+        let disable = try #require(decoded.postMealSMB)
+        let disabled = try disable.applying(to: Trio.PostMealSMBStatus(enabled: true, revision: "initial", durationMinutes: 30))
+        #expect(!disabled.enabled)
+        #expect(try disable.applying(to: disabled) == disabled)
+        let enable = Trio.PostMealSMBSettingRequest(id: UUID(), expectedRevision: disabled.revision, enabled: true)
+        let enabled = try enable.applying(to: disabled)
+        #expect(enabled.enabled)
+        #expect(throws: (any Error).self) { try disable.applying(to: enabled) }
+        let status = Trio.PostMealSMBStatus(enabled: false, revision: id.uuidString, durationMinutes: 30)
+        let senderStatus = try JSONDecoder().decode(LoopFollow.PostMealSMBStatus.self, from: JSONEncoder().encode(status))
+        #expect(senderStatus.revision == id.uuidString && !senderStatus.enabled && senderStatus.durationMinutes == 30)
+    }
+
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
     private let source = "https://example.invalid/integration"
     private let bundleID = "test.trio"

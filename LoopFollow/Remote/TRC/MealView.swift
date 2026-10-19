@@ -8,6 +8,9 @@ import SwiftUI
 struct MealView: View {
     @Environment(\.presentationMode) private var presentationMode
     @State private var showMealReview = false
+    @State private var smbSettingMessage: String?
+    @State private var smbSettingSending = false
+    @State private var pendingSMBSetting: UUID?
     @State private var advisorDraft: SmartMealDraft?
     @State private var advisorAttempted = false
     @ObservedObject private var liveMealSnapshot = Observable.shared.mealReview
@@ -62,6 +65,40 @@ struct MealView: View {
         case validationError
     }
 
+    private var currentPostMealSMBStatus: PostMealSMBStatus? {
+        guard let snapshot = liveMealSnapshot.value, let receiver = snapshot.smartMeal,
+              receiver.isCurrent(now: Date(), calculationDate: snapshot.date, bundleID: Storage.shared.bundleId.value),
+              receiver.postMealSMB?.durationMinutes == 30 else { return nil }
+        return receiver.postMealSMB
+    }
+
+    private func sendPostMealSMBSetting(enabled: Bool, revision: String) {
+        smbSettingSending = true
+        AuthService.authenticate(reason: "Confirm post-meal SMB block setting.") { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    guard currentPostMealSMBStatus?.revision == revision else {
+                        smbSettingSending = false
+                        smbSettingMessage = "Trio status changed. Check the current setting and try again."
+                        return
+                    }
+                    let request = PostMealSMBSettingRequest(id: UUID(), expectedRevision: revision, enabled: enabled)
+                    pushNotificationManager.sendPostMealSMBSetting(request) { success, error in
+                        DispatchQueue.main.async {
+                            smbSettingSending = false
+                            pendingSMBSetting = success ? request.id : nil
+                            smbSettingMessage = success ? "Command submitted; waiting for Trio confirmation." : (error ?? "Setting command failed.")
+                        }
+                    }
+                case .unavailable, .failed, .canceled:
+                    smbSettingSending = false
+                    smbSettingMessage = "Authentication did not complete."
+                }
+            }
+        }
+    }
+
     var body: some View {
         NavigationView {
             VStack {
@@ -69,6 +106,25 @@ struct MealView: View {
                     Section {
                         Button("Smart Meal Advisor") { showMealReview = true }
                             .accessibilityIdentifier("meal-open-advisor")
+                    }
+                    Section("Post-meal SMB block") {
+                        if let state = currentPostMealSMBStatus {
+                            Toggle("Block SMB for 30 minutes after meals", isOn: Binding(
+                                get: { state.enabled },
+                                set: { sendPostMealSMBSetting(enabled: $0, revision: state.revision) }
+                            ))
+                            .disabled(smbSettingSending)
+                            .accessibilityIdentifier("post-meal-smb-toggle")
+                            Text("Trio reports: \(state.enabled ? "enabled" : "disabled"). Basal and manual boluses continue.").font(.footnote)
+                            if let pendingSMBSetting, state.revision == pendingSMBSetting.uuidString {
+                                Text("Trio confirmed the setting.").font(.footnote)
+                            } else if pendingSMBSetting != nil {
+                                Text("Waiting for Trio confirmation. The reported setting above remains authoritative.").font(.footnote)
+                            }
+                        } else {
+                            Text("Updated Trio with a fresh paired status is required. Block status is unconfirmed.")
+                        }
+                        if let smbSettingMessage { Text(smbSettingMessage).font(.footnote) }
                     }
                     if advisorUnresolved {
                         Section("Previous advisor send needs checking") {

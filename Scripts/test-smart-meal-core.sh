@@ -16,4 +16,4 @@ cat > "$test_root/Package.swift" <<'PACKAGE'
 import PackageDescription
 let package = Package(name: "SmartMealCoreTests", platforms: [.macOS(.v13)], targets: [.target(name: "LoopFollow"), .testTarget(name: "LoopFollowTests", dependencies: ["LoopFollow"])], swiftLanguageModes: [.v5])
 PACKAGE
-swift test --package-path "$test_root"
+swift test --disable-sandbox --package-path "$test_root"

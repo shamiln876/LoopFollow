@@ -46,6 +46,10 @@
             s.smartMeal = .init(protocolVersion: 1, generatedAt: now.timeIntervalSince1970,
                                 calculationAt: now.timeIntervalSince1970, bundleIdentifier: "test.trio", enabled: true,
                                 configuration: config, receipts: [])
+            if ProcessInfo.processInfo.arguments.contains("--post-meal-smb-ui-test") {
+                s.smartMeal?.postMealSMB = .init(enabled: !ProcessInfo.processInfo.arguments.contains("--post-meal-smb-disabled"),
+                                               revision: "initial", durationMinutes: 30)
+            }
             if ProcessInfo.processInfo.arguments.contains("--smart-meal-low-forecast") {
                 s.minPredMgdl = 65; s.minGuardMgdl = 29; s.eventualMgdl = 107
                 s.smartMeal?.allowsLowPredictionReview = true
