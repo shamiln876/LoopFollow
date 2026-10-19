@@ -142,6 +142,7 @@ platform :ios do
       scheme: "LoopFollow",
       output_name: "LoopFollow.ipa",
       configuration: "Release",
+      xcargs: ENV["NATIVE_PLATE_SCANNER_REQUIRED"] == "true" ? "SWIFT_ACTIVE_COMPILATION_CONDITIONS=PLATE_SCAN_REQUIRE_NATIVE" : nil,
       destination: 'generic/platform=iOS',
       buildlog_path: 'buildlog',
       export_options: {
