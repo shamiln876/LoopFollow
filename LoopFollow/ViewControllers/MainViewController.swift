@@ -42,6 +42,11 @@ class MainViewController: UIViewController, UNUserNotificationCenterDelegate {
 
     var statsDisplayModel = StatsDisplayModel()
 
+    // Main-thread-only: command feedback refreshes must not overlap requests
+    // or allow older responses to overwrite newer treatment/status data.
+    var isFetchingNSTreatments = false
+    var isFetchingNSDeviceStatus = false
+
     /// The hosting controller's view — hidden during loading / first-time setup.
     private var mainContentView: UIView!
 

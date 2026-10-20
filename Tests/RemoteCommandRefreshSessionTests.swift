@@ -7,7 +7,7 @@ import Testing
 
 struct RemoteCommandRefreshSessionTests {
     private final class Harness {
-        var time = Date(timeIntervalSince1970: 1800000000)
+        var time = Date(timeIntervalSince1970: 1_800_000_000)
         var source = "source-a"
         var work: [(TimeInterval, () -> Void)] = []
         var refreshes = 0
@@ -19,7 +19,7 @@ struct RemoteCommandRefreshSessionTests {
         )
 
         func runDue(after seconds: TimeInterval) {
-            time = Date(timeIntervalSince1970: 1800000000 + seconds)
+            time = Date(timeIntervalSince1970: 1_800_000_000 + seconds)
             let due = work.filter { $0.0 <= seconds }
             work.removeAll { $0.0 <= seconds }
             for (_, action) in due { action() }
