@@ -45,7 +45,7 @@ enum SmartMealDelivery {
         // forecast. The receiver independently refuses actual lows and severe predictions.
         if acknowledgedLowForecast, status.allowsLowPredictionReview == true,
            let minimum = snapshot?.minPredMgdl, let guardMinimum = snapshot?.minGuardMgdl,
-           minimum >= 54, (minimum < 70 || guardMinimum < 70)
+           minimum >= 54, minimum < 70 || guardMinimum < 70
         {
             request.lowPredictionAcknowledged = true
         }
