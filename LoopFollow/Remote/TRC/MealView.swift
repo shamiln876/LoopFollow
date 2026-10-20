@@ -369,7 +369,7 @@ struct MealView: View {
                     // No separate forecast-blocking alert. Include the advisory
                     // within the existing dose confirmation before authentication.
                     if let draft = advisorDraft, let minPred = draft.snapshot.minPredMgdl,
-                       let minGuard = draft.snapshot.minGuardMgdl, (minPred < 70 || minGuard < 70)
+                       let minGuard = draft.snapshot.minGuardMgdl, minPred < 70 || minGuard < 70
                     {
                         message += "\nTrio forecasts a low. Review current glucose, trend and IOB before approving."
                     }
