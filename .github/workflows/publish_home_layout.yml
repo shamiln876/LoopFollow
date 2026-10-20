@@ -1,0 +1,132 @@
+name: Publish LoopFollow home CR layout
+run-name: Verified LoopFollow home CR layout to internal TestFlight
+on:
+  push:
+    branches: [fix/home-info-cr-visible]
+    paths: [.github/workflows/publish_home_layout.yml]
+permissions:
+  contents: read
+concurrency:
+  group: loopfollow-home-cr-testflight
+  cancel-in-progress: false
+jobs:
+  verify-build-publish:
+    runs-on: xcode-27
+    timeout-minutes: 70
+    env:
+      CI: 'true'
+      TEAMID: ${{ secrets.TEAMID }}
+      GH_PAT: ${{ secrets.GH_PAT }}
+      FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+      FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+      FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      MATCH_READONLY: 'true'
+      USE_EXISTING_TRIO_CERTIFICATE: 'true'
+      NATIVE_PLATE_SCANNER_REQUIRED: 'true'
+      MINIMUM_BUILD_NUMBER: '26'
+      WAIT_FOR_PROCESSING: 'true'
+    steps:
+      - name: Checkout exact release source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify only intended UI change and release workflow
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          base = '7d218e8624b7f842810ad5427eb3f1a905cb5cf3'
+          path = 'LoopFollow/InfoTable/InfoTableView.swift'
+          wanted = {path, '.github/workflows/publish_home_layout.yml'}
+          changed = set(subprocess.check_output(['git','diff','--name-only',base,'HEAD'],text=True).splitlines())
+          assert changed == wanted, f'Unexpected source changes: {changed}'
+          previous = subprocess.check_output(['git','show',f'{base}:{path}'],text=True)
+          current = open(path).read()
+          old = '@ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 22'
+          new = '@ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 20'
+          assert previous.count(old) == 1 and current == previous.replace(old,new), 'UI diff is not the single intended layout adjustment'
+          print('PASS: only 22-to-20 point info-row adjustment; no insulin/remote changes')
+          PY
+      - name: Select previously used iOS 27 SDK
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_27.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Retained advisor and scanner regression checks
+        run: |
+          bash Scripts/test-smart-meal-core.sh
+          bash Scripts/test-plate-scanner.sh
+      - name: Install existing signing and upload dependencies
+        run: |
+          bundle install
+          table_path=$(bundle exec ruby -e 'puts Gem::Specification.find_by_name("fastlane").gem_dir')/match/lib/match/table_printer.rb
+          test -f "$table_path"
+          sed -i "" "/puts(Terminal::Table.new(params))/d" "$table_path"
+      - name: Build and sign using existing family identity
+        run: bundle exec fastlane build_LoopFollow
+      - name: Verify signed app identity, source and minimum build number
+        run: |
+          python3 Scripts/verify-native-plate-ipa.py LoopFollow.ipa
+          python3 Scripts/verify-smart-meal-distribution.py LoopFollow.ipa --source "$GITHUB_SHA" --output home-layout-candidate.json
+          python3 - <<'PY'
+          import json
+          p=json.load(open('native-plate-ipa-verification.json'))
+          assert int(p['CFBundleVersion']) >= 26, 'Must be a newer TestFlight build'
+          assert p['CFBundleIdentifier'] == 'com.D3GG62L9X8.LoopFollow'
+          print('Verified candidate build:',p['CFBundleVersion'])
+          PY
+          shasum -a 256 LoopFollow.ipa > LoopFollow.ipa.sha256
+      - name: Upload exactly this verified package to internal TestFlight
+        run: |
+          mkdir -p "$RUNNER_TEMP/home-cr-upload/fastlane"
+          cat > "$RUNNER_TEMP/home-cr-upload/fastlane/Fastfile" <<'RUBY'
+          lane :publish do
+            api_key = app_store_connect_api_key(
+              key_id: ENV.fetch('FASTLANE_KEY_ID'),
+              issuer_id: ENV.fetch('FASTLANE_ISSUER_ID'),
+              key_content: ENV.fetch('FASTLANE_KEY')
+            )
+            upload_to_testflight(
+              api_key: api_key,
+              ipa: File.join(ENV.fetch('GITHUB_WORKSPACE'), 'LoopFollow.ipa'),
+              skip_submission: true,
+              distribute_external: false,
+              skip_waiting_for_build_processing: false,
+              changelog: 'Home dashboard: CR row fully visible; no dosing or remote-command changes.'
+            )
+          end
+          RUBY
+          cd "$RUNNER_TEMP/home-cr-upload"
+          BUNDLE_GEMFILE="$GITHUB_WORKSPACE/Gemfile" bundle exec fastlane publish
+      - name: Read Apple processing status
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('native-plate-ipa-verification.json').read_text())
+          Path('expected-build.txt').write_text(str(p['CFBundleVersion']))
+          PY
+          git clone --quiet --depth 1 --branch feature/post-meal-smb-loopfollow https://github.com/shamiln876/Trio.git "$RUNNER_TEMP/trio-status"
+          bundle exec ruby "$RUNNER_TEMP/trio-status/scripts/testflight-read-status.rb" com.D3GG62L9X8.LoopFollow apple-home-cr-status.json
+          python3 - <<'PY'
+          import json
+          expected=open('expected-build.txt').read().strip()
+          data=json.load(open('apple-home-cr-status.json'))
+          matches=[b for b in data['builds'] if b['build']==expected]
+          assert matches, f'TestFlight does not list new build {expected}'
+          b=matches[0]
+          assert b['processingState']=='VALID', f'Build not yet valid: {b}'
+          assert (b['beta'] or {}).get('internalBuildState') == 'IN_BETA_TESTING', f'Build not yet internal beta: {b}'
+          print('Apple confirms internally available build',expected)
+          PY
+      - name: Save release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loopfollow-home-cr-testflight
+          path: |
+            home-layout-candidate.json
+            native-plate-ipa-verification.json
+            LoopFollow.ipa.sha256
+            apple-home-cr-status.json
