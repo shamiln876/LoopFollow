@@ -78,7 +78,7 @@ enum MealReviewCalculation {
         // Receiver-supported caregiver review can waive a mild *predicted* low; never
         // waive an actual low or a minimum below 54 mg/dL (3.0 mmol/L).
         let forecastReviewSupported = allowReviewedLowForecast && snapshot.smartMeal?.allowsLowPredictionReview == true
-        if includeSafetyHolds, let predicted = snapshot.minPredMgdl, predicted < 70, (!forecastReviewSupported || predicted < 54) {
+        if includeSafetyHolds, let predicted = snapshot.minPredMgdl, predicted < 70, !forecastReviewSupported || predicted < 54 {
             reasons.append(predicted < 54 ? "Severe low forecast (below 3.0 mmol/L): dose prefill held." : "Low forecast requires an updated Trio receiver with caregiver acknowledgment.")
         }
         if includeSafetyHolds, let guardBG = snapshot.minGuardMgdl, guardBG < 70, !forecastReviewSupported {
