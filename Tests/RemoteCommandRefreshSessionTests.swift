@@ -22,7 +22,9 @@ struct RemoteCommandRefreshSessionTests {
             time = Date(timeIntervalSince1970: 1_800_000_000 + seconds)
             let due = work.filter { $0.0 <= seconds }
             work.removeAll { $0.0 <= seconds }
-            for (_, action) in due { action() }
+            for (_, action) in due {
+                action()
+            }
         }
     }
 
