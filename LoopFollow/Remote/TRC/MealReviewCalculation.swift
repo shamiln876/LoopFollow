@@ -51,7 +51,7 @@ enum MealReviewCalculation {
         return result.total.isFinite ? result : nil
     }
 
-    static func reasons(snapshot: MealReviewSnapshot?, samples: [GlucoseSample], newestTreatment: Date?, now: Date, includeSafetyHolds: Bool = true) -> [String] {
+    static func reasons(snapshot: MealReviewSnapshot?, samples: [GlucoseSample], newestTreatment: Date?, now: Date, includeSafetyHolds: Bool = true, allowReviewedLowForecast: Bool = false) -> [String] {
         guard let snapshot else { return ["Waiting for a successful Trio calculation."] }
         var reasons: [String] = []
         if !MealReviewSnapshot.fresh(snapshot.date, now: now) { reasons.append("Trio calculation is missing or stale.") }
@@ -75,8 +75,15 @@ enum MealReviewCalculation {
         if samples.contains(where: { $0.date > now.addingTimeInterval(60) }) { reasons.append("Glucose has a future timestamp. Check the device clock.") }
         if includeSafetyHolds, let latest, latest.mgdl < 70 { reasons.append("Low glucose: follow the established hypoglycemia treatment plan before meal review.") }
         if snapshot.minPredMgdl == nil || snapshot.minGuardMgdl == nil { reasons.append("Trio's selected prediction or guard value is unavailable.") }
-        if includeSafetyHolds, let predicted = snapshot.minPredMgdl, predicted < 70 { reasons.append("Trio's selected prediction is below 70 mg/dL (3.9 mmol/L). Dose prefill is on hold.") }
-        if includeSafetyHolds, let guardBG = snapshot.minGuardMgdl, guardBG < 70 { reasons.append("Trio's guard prediction is below 70 mg/dL (3.9 mmol/L). Dose prefill is on hold.") }
+        // Receiver-supported caregiver review can waive a mild *predicted* low; never
+        // waive an actual low or a minimum below 54 mg/dL (3.0 mmol/L).
+        let forecastReviewSupported = allowReviewedLowForecast && snapshot.smartMeal?.allowsLowPredictionReview == true
+        if includeSafetyHolds, let predicted = snapshot.minPredMgdl, predicted < 70, !forecastReviewSupported || predicted < 54 {
+            reasons.append(predicted < 54 ? "Severe low forecast (below 3.0 mmol/L): dose prefill held." : "Low forecast requires an updated Trio receiver with caregiver acknowledgment.")
+        }
+        if includeSafetyHolds, let guardBG = snapshot.minGuardMgdl, guardBG < 70, !forecastReviewSupported {
+            reasons.append("Low guard forecast requires an updated Trio receiver with caregiver acknowledgment.")
+        }
         if recentDelta(samples: samples, now: now) == nil { reasons.append("At least two recent glucose readings are required for the trend adjustment.") }
         if let treatment = newestTreatment, let cycle = snapshot.date, let insulin = snapshot.iobDate,
            treatment > min(cycle, insulin).addingTimeInterval(5)

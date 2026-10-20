@@ -37,6 +37,7 @@ struct SmartMealRequest: Codable, Equatable, Sendable {
     let includeFatProtein: Bool
     let protein: Int
     let fat: Int
+    var lowPredictionAcknowledged: Bool? = nil
 
     var totalCarbs: Int { immediateCarbs + delayedCarbs }
     var digest: String { (try? SmartMealWire.digest(self)) ?? "" }
@@ -93,6 +94,7 @@ struct SmartMealReceiverStatus: Codable, Equatable, Sendable {
     let enabled: Bool
     let configuration: SmartMealConfiguration
     let receipts: [SmartMealReceipt]
+    var allowsLowPredictionReview: Bool? = nil
 
     func isCurrent(now: Date, calculationDate: Date?, bundleID: String) -> Bool {
         guard let calculationDate else { return false }

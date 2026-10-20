@@ -87,7 +87,7 @@ struct SmartMealDraft {
 
     static func prefillReasons(settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, source: String, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, now: Date) -> [String] {
         var reasons = MealReviewFullCalculation.reasons(settings: settings, snapshot: snapshot, source: source, now: now)
-            + MealReviewCalculation.reasons(snapshot: snapshot, samples: samples, newestTreatment: newestTreatment, now: now)
+            + MealReviewCalculation.reasons(snapshot: snapshot, samples: samples, newestTreatment: newestTreatment, now: now, allowReviewedLowForecast: true)
         if let settings {
             if settings.isHistorical { reasons.append("Saved Trio settings are historical. Check the current percentage and limits in calculator settings before dose prefill.") }
             else if now.timeIntervalSince(settings.checkedAt) < 0 || now.timeIntervalSince(settings.checkedAt) > 86400 {

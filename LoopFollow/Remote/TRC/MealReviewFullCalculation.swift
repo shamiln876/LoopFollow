@@ -58,7 +58,7 @@ enum MealReviewFullCalculation {
     }
 
     static func review(newCarbs: Double, settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, source: String, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, now: Date) -> Result? {
-        evaluate(newCarbs: newCarbs, settings: settings, snapshot: snapshot, source: source, samples: samples, newestTreatment: newestTreatment, now: now, includeSafetyHolds: true)
+        evaluate(newCarbs: newCarbs, settings: settings, snapshot: snapshot, source: source, samples: samples, newestTreatment: newestTreatment, now: now, includeSafetyHolds: true, allowReviewedLowForecast: true)
     }
 
     /// Read-only arithmetic can remain visible during a low-forecast hold.
@@ -67,9 +67,9 @@ enum MealReviewFullCalculation {
         evaluate(newCarbs: newCarbs, settings: settings, snapshot: snapshot, source: source, samples: samples, newestTreatment: newestTreatment, now: now, includeSafetyHolds: false)
     }
 
-    private static func evaluate(newCarbs: Double, settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, source: String, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, now: Date, includeSafetyHolds: Bool) -> Result? {
+    private static func evaluate(newCarbs: Double, settings: MealReviewSettings?, snapshot: MealReviewSnapshot?, source: String, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, now: Date, includeSafetyHolds: Bool, allowReviewedLowForecast: Bool = false) -> Result? {
         guard reasons(settings: settings, snapshot: snapshot, source: source, now: now).isEmpty,
-              MealReviewCalculation.reasons(snapshot: snapshot, samples: samples, newestTreatment: newestTreatment, now: now, includeSafetyHolds: includeSafetyHolds).isEmpty,
+              MealReviewCalculation.reasons(snapshot: snapshot, samples: samples, newestTreatment: newestTreatment, now: now, includeSafetyHolds: includeSafetyHolds, allowReviewedLowForecast: allowReviewedLowForecast).isEmpty,
               let settings, let s = snapshot, let cob = s.cob, let ratio = s.carbRatio,
               let target = s.targetMgdl, let isf = s.effectiveISF, let iob = s.iob,
               let bg = MealReviewCalculation.latestGlucose(samples: samples, now: now)?.mgdl,

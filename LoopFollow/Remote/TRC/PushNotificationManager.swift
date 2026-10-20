@@ -266,10 +266,18 @@ class PushNotificationManager {
             request.setValue("bearer \(jwt)", forHTTPHeaderField: "authorization")
             request.setValue("application/json", forHTTPHeaderField: "content-type")
             request.setValue("10", forHTTPHeaderField: "apns-priority")
-            request.setValue(String(Int(payload.timestamp + (payload.smartMeal == nil ? 600 : 120))), forHTTPHeaderField: "apns-expiration")
+            // Avoid storing remote insulin and meal commands for delivery at a later time.
+            // An APNs HTTP 200 only means Apple accepted the notification; never treat it
+            // as verification of Trio execution or pump delivery.
+            switch payload.commandType {
+            case .bolus, .meal, .smartMeal:
+                request.setValue("0", forHTTPHeaderField: "apns-expiration")
+            default:
+                request.setValue(String(Int(payload.timestamp + 600)), forHTTPHeaderField: "apns-expiration")
+                request.setValue(payload.commandType.rawValue, forHTTPHeaderField: "apns-collapse-id")
+            }
             request.setValue(bundleId, forHTTPHeaderField: "apns-topic")
             request.setValue("alert", forHTTPHeaderField: "apns-push-type")
-            request.setValue(payload.smartMeal?.id.uuidString ?? payload.commandType.rawValue, forHTTPHeaderField: "apns-collapse-id")
 
             request.httpBody = try JSONEncoder().encode(finalMessage)
 
@@ -322,6 +330,14 @@ class PushNotificationManager {
                 } else {
                     completion(false, "Failed to get a valid HTTP response.")
                 }
+            }
+            // Persist an unverified-delivery reminder before sending an insulin/meal
+            // push. Network/APNs acceptance is not proof of pump or carb enactment.
+            switch payload.commandType {
+            case .bolus, .meal, .smartMeal:
+                RemoteDeliveryUnverified.record(kind: payload.commandType.rawValue)
+            default:
+                break
             }
             task.resume()
 

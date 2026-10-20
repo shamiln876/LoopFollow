@@ -8,6 +8,9 @@ import SwiftUI
 struct MealView: View {
     @Environment(\.presentationMode) private var presentationMode
     @State private var showMealReview = false
+    @State private var confirmAdvisorAfterDismiss = false
+    @State private var didOpenAdvisor = false
+    private let launchAdvisorOnAppear: Bool
     @State private var advisorDraft: SmartMealDraft?
     @State private var advisorAttempted = false
     @ObservedObject private var liveMealSnapshot = Observable.shared.mealReview
@@ -43,7 +46,8 @@ struct MealView: View {
     @State private var isScheduling: Bool = false
     @State private var showFatProteinOrderBanner = false
 
-    init(initialAdvisorDraft: SmartMealDraft? = nil) {
+    init(initialAdvisorDraft: SmartMealDraft? = nil, launchAdvisorOnAppear: Bool = false) {
+        self.launchAdvisorOnAppear = launchAdvisorOnAppear
         _advisorDraft = State(initialValue: initialAdvisorDraft)
         if let draft = initialAdvisorDraft {
             _carbs = State(initialValue: HKQuantity(unit: .gram(), doubleValue: Double(draft.plan.immediateCarbs)))
@@ -278,7 +282,13 @@ struct MealView: View {
                 .navigationTitle("Meal")
                 .navigationBarTitleDisplayMode(.inline)
             }
-            .sheet(isPresented: $showMealReview) {
+            .sheet(isPresented: $showMealReview, onDismiss: {
+                if confirmAdvisorAfterDismiss {
+                    confirmAdvisorAfterDismiss = false
+                    alertType = .confirmMeal
+                    showAlert = true
+                }
+            }) {
                 MealReviewView(initialCarbs: advisorDraft.map { Double($0.plan.immediateCarbs + $0.plan.delayedCarbs) } ?? carbs.doubleValue(for: .gram()), initialBolus: advisorDraft.flatMap { draft in
                     let current = bolusAmount.doubleValue(for: .internationalUnit())
                     return draft.plan.usesManualBolus || current != draft.plan.upfrontInsulin ? current : nil
@@ -291,6 +301,10 @@ struct MealView: View {
                     bolusAmount = HKQuantity(unit: .internationalUnit(), doubleValue: draft.plan.upfrontInsulin)
                     isScheduling = false
                     selectedTime = nil
+                    // Present the EXISTING dose confirmation immediately after the
+                    // advisor sheet closes. No second "Send Meal" tap is needed.
+                    confirmAdvisorAfterDismiss = true
+                    showMealReview = false
                 })
             }
             .onChange(of: liveMealSnapshot.value) { _, _ in
@@ -300,6 +314,10 @@ struct MealView: View {
             .onAppear {
                 selectedTime = nil
                 isScheduling = false
+                if launchAdvisorOnAppear, !didOpenAdvisor {
+                    didOpenAdvisor = true
+                    showMealReview = true
+                }
 
                 quickPickMeals.refresh(
                     maxCarbs: maxCarbs.value.doubleValue(for: .gram()),
@@ -348,6 +366,13 @@ struct MealView: View {
                     if bolusAmount > 0 {
                         message += String(format: "\nBolus: %.2f U", bolusAmount)
                     }
+                    // No separate forecast-blocking alert. Include the advisory
+                    // within the existing dose confirmation before authentication.
+                    if let draft = advisorDraft, let minPred = draft.snapshot.minPredMgdl,
+                       let minGuard = draft.snapshot.minGuardMgdl, minPred < 70 || minGuard < 70
+                    {
+                        message += "\nTrio forecasts a low. Review current glucose, trend and IOB before approving."
+                    }
 
                     return Alert(
                         title: Text("Confirm Meal"),
@@ -371,8 +396,9 @@ struct MealView: View {
                                                 self.alertType = .validationError
                                                 self.showAlert = true
                                             case .canceled:
-                                                // User canceled, no alert
-                                                break
+                                                self.alertMessage = "Authentication canceled. No meal command was submitted."
+                                                self.alertType = .validationError
+                                                self.showAlert = true
                                             }
                                         }
                                     }
@@ -385,7 +411,7 @@ struct MealView: View {
                     )
                 case .statusSuccess:
                     return Alert(
-                        title: Text("Command Sent"),
+                        title: Text("Delivery NOT Confirmed"),
                         message: Text(statusMessage ?? ""),
                         dismissButton: .default(Text("OK"), action: {
                             presentationMode.wrappedValue.dismiss()
@@ -433,7 +459,7 @@ struct MealView: View {
                                   snapshot: Observable.shared.mealReview.value, source: Storage.shared.url.value),
                   MealReviewCalculation.reasons(snapshot: Observable.shared.mealReview.value,
                                                 samples: Observable.shared.mealReviewGlucose.value,
-                                                newestTreatment: Observable.shared.mealReviewNewestTreatment.value, now: current).isEmpty,
+                                                newestTreatment: Observable.shared.mealReviewNewestTreatment.value, now: current, allowReviewedLowForecast: true).isEmpty,
                   carbs.doubleValue(for: .gram()) == Double(draft.plan.immediateCarbs),
                   bolusAmount.doubleValue(for: .internationalUnit()) <= maxBolus.value.doubleValue(for: .internationalUnit()),
                   bolusAmount.doubleValue(for: .internationalUnit()) >= 0,
@@ -453,7 +479,7 @@ struct MealView: View {
                 smartRequest = SmartMealDelivery.request(draft: draft, bolus: bolusAmount.doubleValue(for: .internationalUnit()),
                                                          protein: protein.doubleValue(for: .gram()), fat: fat.doubleValue(for: .gram()),
                                                          snapshot: liveMealSnapshot.value, settings: Storage.shared.mealReviewSettings.value,
-                                                         bundleID: Storage.shared.bundleId.value, now: current)
+                                                         bundleID: Storage.shared.bundleId.value, now: current, acknowledgedLowForecast: true)
                 guard smartRequest != nil else {
                     alertMessage = "Smart meal held: invalid meal values or changed receiver settings. Review again. Nothing sent."
                     alertType = .validationError; showAlert = true; return
@@ -500,9 +526,7 @@ struct MealView: View {
                             bolus: bolusAmount.doubleValue(for: .internationalUnit())
                         )
                     }
-                    statusMessage = isSmartMeal
-                        ? "Request sent. Waiting for Trio to confirm meal entries and upfront bolus initiation. Nothing is confirmed by APNs acceptance alone."
-                        : RemoteCommandMessage.sent
+                    statusMessage = "Apple accepted the remote meal request, but neither carb entry nor pump insulin delivery is verified. Check the actual Trio meal entry and pump bolus history before relying on this dose. Do NOT resend until you confirm what was delivered."
                     LogManager.shared.log(
                         category: .apns,
                         message: "sendMealPushNotification succeeded - Carbs: \(carbs.doubleValue(for: .gram())) g, Protein: \(protein.doubleValue(for: .gram())) g, Fat: \(fat.doubleValue(for: .gram())) g, Bolus: \(bolusAmount.doubleValue(for: .internationalUnit())) U, Scheduled: \(scheduledDate != nil ? formatDate(scheduledDate!) : "now")"
@@ -516,7 +540,7 @@ struct MealView: View {
                     isScheduling = false
                     alertType = .statusSuccess
                 } else {
-                    statusMessage = (errorMessage ?? "Failed to send meal command.") + (advisorDraft != nil ? " Delivery is uncertain. Check Trio and Nightscout before creating another draft; do not retry blindly." : "")
+                    statusMessage = (errorMessage ?? "Could not verify remote command submission.") + " Delivery status is uncertain. Check Trio and actual pump bolus history before deciding whether to retry. Do NOT automatically resend."
                     LogManager.shared.log(
                         category: .apns,
                         message: "sendMealPushNotification failed with error: \(errorMessage ?? "unknown error")"
