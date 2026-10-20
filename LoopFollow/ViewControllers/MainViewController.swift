@@ -1036,7 +1036,17 @@ class MainViewController: UIViewController, UNUserNotificationCenterDelegate {
             items.append(InfoDisplayItem(type: type, isVisible: type.defaultVisible, coloring: InfoColoring()))
         }
 
-        Storage.shared.infoDisplayItems.value = items
+        // Apply the requested compact layout once. The rows remain available in
+        // Information Display settings, and later user choices are preserved.
+        if !Storage.shared.compactInfoLayoutApplied.value {
+            for index in items.indices where items[index].type == .sage || items[index].type == .cage {
+                items[index].isVisible = false
+            }
+            Storage.shared.infoDisplayItems.value = items
+            Storage.shared.compactInfoLayoutApplied.value = true
+        } else {
+            Storage.shared.infoDisplayItems.value = items
+        }
     }
 
     // MARK: - First Time Setup

@@ -4,6 +4,7 @@
 import HealthKit
 import LocalAuthentication
 import SwiftUI
+import UIKit
 
 struct BolusView: View {
     @Environment(\.presentationMode) private var presentationMode
@@ -21,6 +22,8 @@ struct BolusView: View {
     @State private var alertType: AlertType? = nil
     @State private var alertMessage: String? = nil
     @State private var isLoading = false
+    @State private var isAuthenticating = false
+    @State private var isAdjusting = false
     @State private var statusMessage: String? = nil
 
     private let pushNotificationManager = PushNotificationManager()
@@ -105,8 +108,15 @@ struct BolusView: View {
                                 handleValidationError(message)
                             }
                         )
+                        HStack(spacing: 16) {
+                            adjustmentButton("−0.1 U", direction: .decrease)
+                            Spacer()
+                            adjustmentButton("+0.1 U", direction: .increase)
+                        }
+                        .disabled(isLoading || isAuthenticating || isAdjusting || showAlert)
                     }
                 }
+                .disabled(isLoading || isAuthenticating || isAdjusting)
                 .safeAreaInset(edge: .bottom) {
                     Button {
                         bolusFieldIsFocused = false
@@ -135,7 +145,7 @@ struct BolusView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .disabled(isLoading)
+                    .disabled(isLoading || isAuthenticating || isAdjusting)
                     .padding(.horizontal)
                     .padding(.vertical, 8)
                     .background(.bar)
@@ -156,8 +166,10 @@ struct BolusView: View {
                         title: Text("Confirm Bolus"),
                         message: Text("Are you sure you want to send \(InsulinFormatter.shared.string(bolusAmount)) U?"),
                         primaryButton: .default(Text("Confirm"), action: {
+                            isAuthenticating = true
                             AuthService.authenticate(reason: "Confirm your identity to send bolus.") { result in
                                 DispatchQueue.main.async {
+                                    self.isAuthenticating = false
                                     switch result {
                                     case .success:
                                         self.sendBolus()
@@ -217,6 +229,34 @@ struct BolusView: View {
     }
 
     // MARK: - Recommended bolus UI
+
+    private func adjustmentButton(_ title: String, direction: ManualBolusAdjustment.Direction) -> some View {
+        let next = ManualBolusAdjustment.adjusted(
+            current: bolusAmount.doubleValue(for: .internationalUnit()),
+            direction: direction,
+            increment: stepU,
+            maximum: maxBolus.value.doubleValue(for: .internationalUnit())
+        )
+        return Button(title) {
+            isAdjusting = true
+            bolusFieldIsFocused = false
+            UIApplication.shared.endEditing()
+            // Commit the text field before reading the amount; never reuse a
+            // value captured before editing ended or a validation alert appeared.
+            DispatchQueue.main.async {
+                defer { isAdjusting = false }
+                guard !showAlert, !isLoading, !isAuthenticating,
+                      let committed = ManualBolusAdjustment.adjusted(
+                          current: bolusAmount.doubleValue(for: .internationalUnit()), direction: direction,
+                          increment: stepU, maximum: maxBolus.value.doubleValue(for: .internationalUnit())
+                      ) else { return }
+                bolusAmount = HKQuantity(unit: .internationalUnit(), doubleValue: committed)
+            }
+        }
+        .buttonStyle(.bordered)
+        .disabled(next == nil)
+        .accessibilityLabel(direction == .increase ? "Increase manual bolus by 0.1 units" : "Decrease manual bolus by 0.1 units")
+    }
 
     @ViewBuilder
     private func recommendedBlocks(now: Date) -> some View {

@@ -44,6 +44,8 @@ struct CommandPayload: Encodable {
     var overrideName: String?
     var scheduledTime: TimeInterval?
     var returnNotification: ReturnNotificationInfo?
+    var smartMeal: SmartMealRequest?
+    var postMealSMB: PostMealSMBSettingRequest?
 
     struct ReturnNotificationInfo: Encodable {
         let productionEnvironment: Bool
@@ -76,5 +78,7 @@ struct CommandPayload: Encodable {
         case overrideName
         case scheduledTime = "scheduled_time"
         case returnNotification = "return_notification"
+        case smartMeal = "smart_meal"
+        case postMealSMB = "post_meal_smb"
     }
 }

@@ -1,5 +1,12 @@
 #! /bin/sh
 
+# The native scanner CI has a separate mandatory lint job. Do not rebuild the
+# formatter inside Xcode as well; source formatting is already checked there.
+if [ "${CI:-}" = "true" ] && [ "${PLATE_SCANNER_CI_SKIP_FORMAT:-0}" = "1" ]; then
+    echo "Skipping duplicate formatter build; the dedicated lint check remains required."
+    exit 0
+fi
+
 # Check if the folder name is exactly "LoopFollow"
 FOLDER_NAME=$(basename "${SRCROOT}")
 if [ "${FOLDER_NAME}" != "LoopFollow" ]; then

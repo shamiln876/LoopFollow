@@ -12,6 +12,10 @@ import SwiftUI
 class Observable {
     static let shared = Observable()
 
+    var mealReviewGlucose = ObservableValue<[MealReviewCalculation.GlucoseSample]>(default: [])
+    var mealReviewNewestTreatment = ObservableValue<Date?>(default: nil)
+    var mealReview = ObservableValue<MealReviewSnapshot?>(default: nil)
+
     var tempTarget = ObservableValue<HKQuantity?>(default: nil)
     var override = ObservableValue<String?>(default: nil)
 

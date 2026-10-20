@@ -164,6 +164,18 @@ class PushNotificationManager {
         sendEncryptedCommand(payload: payload, completion: completion)
     }
 
+    func sendSmartMealPushNotification(request: SmartMealRequest, completion: @escaping (Bool, String?) -> Void) {
+        let payload = CommandPayload(user: user, commandType: .smartMeal, timestamp: request.confirmedAt,
+                                     returnNotification: createReturnNotificationInfo(), smartMeal: request)
+        sendEncryptedCommand(payload: payload, completion: completion)
+    }
+
+    func sendPostMealSMBSetting(_ request: PostMealSMBSettingRequest, completion: @escaping (Bool, String?) -> Void) {
+        let payload = CommandPayload(user: user, commandType: .postMealSMB, timestamp: Date().timeIntervalSince1970,
+                                     returnNotification: createReturnNotificationInfo(), postMealSMB: request)
+        sendEncryptedCommand(payload: payload, completion: completion)
+    }
+
     private func validateCredentials() -> [String]? {
         var errors = [String]()
         let keyIdPattern = "^[A-Z0-9]{10}$"
@@ -260,10 +272,10 @@ class PushNotificationManager {
             request.setValue("bearer \(jwt)", forHTTPHeaderField: "authorization")
             request.setValue("application/json", forHTTPHeaderField: "content-type")
             request.setValue("10", forHTTPHeaderField: "apns-priority")
-            request.setValue("600", forHTTPHeaderField: "apns-expiration")
+            request.setValue(String(Int(payload.timestamp + (payload.smartMeal == nil ? 600 : 120))), forHTTPHeaderField: "apns-expiration")
             request.setValue(bundleId, forHTTPHeaderField: "apns-topic")
             request.setValue("alert", forHTTPHeaderField: "apns-push-type")
-            request.setValue(payload.commandType.rawValue, forHTTPHeaderField: "apns-collapse-id")
+            request.setValue(payload.smartMeal?.id.uuidString ?? payload.commandType.rawValue, forHTTPHeaderField: "apns-collapse-id")
 
             request.httpBody = try JSONEncoder().encode(finalMessage)
 
