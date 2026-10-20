@@ -7,21 +7,30 @@ import SwiftUI
 
 extension MainViewController {
     func webLoadNSDeviceStatus() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { self.webLoadNSDeviceStatus() }
+            return
+        }
+        guard !isFetchingNSDeviceStatus else { return }
+        isFetchingNSDeviceStatus = true
+        let requestedSource = Storage.shared.url.value
         // Recent loop cycles support a cautious, trend-based COB estimate.
         let parameters = ["count": "12"]
         NightscoutUtils.executeDynamicRequest(eventType: .deviceStatus, parameters: parameters) { result in
-            switch result {
-            case let .success(json):
-                if let jsonDeviceStatus = json as? [[String: AnyObject]] {
-                    DispatchQueue.main.async {
+            DispatchQueue.main.async {
+                self.isFetchingNSDeviceStatus = false
+                guard Storage.shared.url.value == requestedSource else { return }
+                switch result {
+                case let .success(json):
+                    if let jsonDeviceStatus = json as? [[String: AnyObject]] {
                         self.updateDeviceStatusDisplay(jsonDeviceStatus: jsonDeviceStatus)
                         Storage.shared.lastLoopingChecked.value = Date()
+                    } else {
+                        self.handleDeviceStatusError()
                     }
-                } else {
+                case .failure:
                     self.handleDeviceStatusError()
                 }
-            case .failure:
-                self.handleDeviceStatusError()
             }
         }
     }

@@ -8,7 +8,8 @@ mkdir -p "$test_root/Sources/LoopFollow" "$test_root/Tests/LoopFollowTests"
 for name in RiceMealPlan MealReviewSettings MealReviewSnapshot MealReviewCalculation MealReviewFullCalculation SmartMealProtocol SmartMealDelivery PushMessage TRCCommandType; do
     cp "$repo_root/LoopFollow/Remote/TRC/$name.swift" "$test_root/Sources/LoopFollow/"
 done
-for name in RiceMealPlanTests MealReviewCalculationTests MealReviewSnapshotTests MealReviewFullCalculationTests SmartMealDeliveryTests; do
+cp "$repo_root/LoopFollow/Remote/RemoteCommandRefreshSession.swift" "$test_root/Sources/LoopFollow/"
+for name in RiceMealPlanTests MealReviewCalculationTests MealReviewSnapshotTests MealReviewFullCalculationTests SmartMealDeliveryTests RemoteCommandRefreshSessionTests; do
     cp "$repo_root/Tests/$name.swift" "$test_root/Tests/LoopFollowTests/"
 done
 cat > "$test_root/Package.swift" <<'PACKAGE'

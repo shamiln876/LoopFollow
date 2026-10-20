@@ -172,175 +172,1016 @@ class PushNotificationManager {
 
     func sendPostMealSMBSetting(_ request: PostMealSMBSettingRequest, completion: @escaping (Bool, String?) -> Void) {
         let payload = CommandPayload(user: user, commandType: .postMealSMB, timestamp: Date().timeIntervalSince1970,
-                                     returnNotification: createReturnNotificationInfo(), postMealSMB: request)
-        sendEncryptedCommand(payload: payload, completion: completion)
+   …4909 tokens truncated…es)
+
+        Storage.shared.colorBGText.$value
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateBGTextAppearance()
+            }
+            .store(in: &cancellables)
+
+        // Update appearance when setting changes
+        Storage.shared.appearanceMode.$value
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] mode in
+                self?.updateAppearance(mode)
+            }
+            .store(in: &cancellables)
+
+        Publishers.MergeMany(
+            Storage.shared.units.$value.map { _ in () }.eraseToAnyPublisher(),
+            Storage.shared.useIFCC.$value.map { _ in () }.eraseToAnyPublisher(),
+            Storage.shared.showGMI.$value.map { _ in () }.eraseToAnyPublisher(),
+            Storage.shared.showStdDev.$value.map { _ in () }.eraseToAnyPublisher()
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] _ in
+            self?.updateStats()
+        }
+        .store(in: &cancellables)
+
+        Storage.shared.timeInRangeModeRaw.$value
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateBGGraphSettings()
+                self?.updateBGGraph()
+            }
+            .store(in: &cancellables)
+
+        Storage.shared.screenlockSwitchState.$value
+            .receive(on: DispatchQueue.main)
+            .sink { newValue in
+                UIApplication.shared.isIdleTimerDisabled = newValue
+            }
+            .store(in: &cancellables)
+
+        Storage.shared.showDisplayName.$value
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateServerText()
+            }
+            .store(in: &cancellables)
+
+        Storage.shared.speakBG.$value
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateQuickActions()
+            }
+            .store(in: &cancellables)
+
+        Storage.shared.url.$value
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.checkAndShowImportButtonIfNeeded()
+            }
+            .store(in: &cancellables)
+
+        Storage.shared.token.$value
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.checkAndShowImportButtonIfNeeded()
+            }
+            .store(in: &cancellables)
+
+        // ShareClient captures the credentials at init, so it's rebuilt on any change.
+        Publishers.MergeMany(
+            Storage.shared.shareUserName.$value.map { _ in () }.eraseToAnyPublisher(),
+            Storage.shared.sharePassword.$value.map { _ in () }.eraseToAnyPublisher(),
+            Storage.shared.shareServer.$value.map { _ in () }.eraseToAnyPublisher()
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] in
+            self?.configureDexShareClient()
+            self?.checkAndShowImportButtonIfNeeded()
+        }
+        .store(in: &cancellables)
+
+        Publishers.CombineLatest4(
+            Storage.shared.remoteApnsKey.$value,
+            Storage.shared.teamId.$value,
+            Storage.shared.remoteKeyId.$value,
+            Storage.shared.lfApnsKey.$value
+        )
+        .combineLatest(Storage.shared.lfKeyId.$value)
+        .map { values, lfKeyId in
+            APNSCredentialSnapshot(
+                remoteApnsKey: values.0,
+                teamId: values.1,
+                remoteKeyId: values.2,
+                lfApnsKey: values.3,
+                lfKeyId: lfKeyId
+            )
+        }
+        .removeDuplicates()
+        .dropFirst()
+        .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
+        .sink { _ in JWTManager.shared.invalidateCache() }
+        .store(in: &cancellables)
+
+        Storage.shared.device.$value
+            .receive(on: DispatchQueue.main)
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                let isTrioDevice = (Storage.shared.device.value == "Trio")
+                let isLoopDevice = (Storage.shared.device.value == "Loop")
+
+                let currentRemoteType = Storage.shared.remoteType.value
+
+                // Check if current remote type is invalid for the device
+                let shouldReset = (currentRemoteType == .loopAPNS && !isLoopDevice) ||
+                    (currentRemoteType == .trc && !isTrioDevice)
+
+                if shouldReset {
+                    Storage.shared.remoteType.value = .none
+                }
+            }
+            .store(in: &cancellables)
+
+        Storage.shared.device.$value
+            .receive(on: DispatchQueue.main)
+            .map { device -> Bool? in
+                device.isEmpty ? nil : (device == "Loop")
+            }
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] isLoop in
+                guard let isLoop = isLoop else { return }
+                Storage.shared.predictionDisplayType.value = isLoop ? .lines : .cone
+                self?.updateOpenAPSPredictionDisplay()
+            }
+            .store(in: &cancellables)
+
+        updateQuickActions()
+
+        speechSynthesizer.delegate = self
+
+        // Check configuration and show appropriate UI
+        if isDataSourceConfigured() {
+            // Data source configured - show loading overlay
+            setupLoadingState()
+            showLoadingOverlay()
+        } else {
+            // No data source - hide all data UI and show setup buttons
+            hideAllDataUI()
+            isInitialLoad = false
+        }
+
+        checkAndShowImportButtonIfNeeded()
     }
 
-    private func validateCredentials() -> [String]? {
-        var errors = [String]()
-        let keyIdPattern = "^[A-Z0-9]{10}$"
-        if !matchesRegex(keyId, pattern: keyIdPattern) {
-            errors.append("APNS Key ID (\(keyId)) must be 10 uppercase alphanumeric characters.")
+    /// Builds the Dexcom Share client from the stored credentials.
+    private func configureDexShareClient() {
+        let shareUserName = Storage.shared.shareUserName.value
+        let sharePassword = Storage.shared.sharePassword.value
+        let shareServer = Storage.shared.shareServer.value == "US" ? KnownShareServers.US.rawValue : KnownShareServers.NON_US.rawValue
+        dexShare = ShareClient(username: shareUserName, password: sharePassword, shareServer: shareServer)
+    }
+
+    // MARK: - Loading Overlay
+
+    private func isDataSourceConfigured() -> Bool {
+        let isNightscoutConfigured = !Storage.shared.url.value.isEmpty
+        let isDexcomConfigured = !Storage.shared.shareUserName.value.isEmpty && !Storage.shared.sharePassword.value.isEmpty
+        return isNightscoutConfigured || isDexcomConfigured
+    }
+
+    private func setupLoadingState() {
+        // If Nightscout is not enabled, mark profile and deviceStatus as loaded
+        // since we only need BG data from Dexcom Share
+        if !IsNightscoutEnabled() {
+            loadingStates["profile"] = true
+            loadingStates["deviceStatus"] = true
         }
-        let teamIdPattern = "^[A-Z0-9]{10}$"
-        if !matchesRegex(teamId, pattern: teamIdPattern) {
-            errors.append("Team ID (\(teamId)) must be 10 uppercase alphanumeric characters.")
-        }
-        if !apnsKey.contains("-----BEGIN PRIVATE KEY-----") || !apnsKey.contains("-----END PRIVATE KEY-----") {
-            errors.append("APNS Key must be a valid PEM-formatted private key.")
-        } else {
-            if let keyData = extractKeyData(from: apnsKey) {
-                if Data(base64Encoded: keyData) == nil {
-                    errors.append("APNS Key contains invalid Base64 key data.")
-                }
-            } else {
-                errors.append("APNS Key has invalid formatting.")
+    }
+
+    private func showLoadingOverlay() {
+        guard loadingOverlay == nil else { return }
+
+        // Hide all data UI while loading
+        hideAllDataUI()
+
+        let overlay = UIView(frame: view.bounds)
+        overlay.backgroundColor = UIColor.systemBackground
+        overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+
+        let activityIndicator = UIActivityIndicatorView(style: .large)
+        activityIndicator.translatesAutoresizingMaskIntoConstraints = false
+        activityIndicator.startAnimating()
+
+        let loadingLabel = UILabel()
+        loadingLabel.translatesAutoresizingMaskIntoConstraints = false
+        loadingLabel.text = "Loading..."
+        loadingLabel.textAlignment = .center
+        loadingLabel.font = UIFont.systemFont(ofSize: 17, weight: .medium)
+        loadingLabel.textColor = UIColor.secondaryLabel
+
+        overlay.addSubview(activityIndicator)
+        overlay.addSubview(loadingLabel)
+
+        NSLayoutConstraint.activate([
+            activityIndicator.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+            activityIndicator.centerYAnchor.constraint(equalTo: overlay.centerYAnchor, constant: -20),
+
+            loadingLabel.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+            loadingLabel.topAnchor.constraint(equalTo: activityIndicator.bottomAnchor, constant: 16),
+        ])
+
+        view.addSubview(overlay)
+        loadingOverlay = overlay
+
+        // Set a timeout to hide the loading overlay if data takes too long
+        loadingTimeoutTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+            if self.isInitialLoad {
+                LogManager.shared.log(category: .general, message: "Loading timeout reached, hiding overlay")
+                self.isInitialLoad = false
+                self.hideLoadingOverlay()
             }
         }
-        return errors.isEmpty ? nil : errors
     }
 
-    private func matchesRegex(_ text: String, pattern: String) -> Bool {
-        let regex = try? NSRegularExpression(pattern: pattern)
-        let range = NSRange(location: 0, length: text.utf16.count)
-        return regex?.firstMatch(in: text, options: [], range: range) != nil
+    private func hideLoadingOverlay() {
+        guard let overlay = loadingOverlay else { return }
+
+        // Cancel the timeout timer
+        loadingTimeoutTimer?.invalidate()
+        loadingTimeoutTimer = nil
+
+        // Show all data UI now that loading is complete
+        showAllDataUI()
+
+        UIView.animate(withDuration: 0.3, animations: {
+            overlay.alpha = 0
+        }, completion: { _ in
+            overlay.removeFromSuperview()
+            self.loadingOverlay = nil
+        })
     }
 
-    private func extractKeyData(from pemString: String) -> String? {
-        let lines = pemString.components(separatedBy: "\n")
-        guard let startIndex = lines.firstIndex(of: "-----BEGIN PRIVATE KEY-----"),
-              let endIndex = lines.firstIndex(of: "-----END PRIVATE KEY-----"),
-              startIndex < endIndex
-        else {
-            return nil
+    func markDataLoaded(_ key: String) {
+        guard isInitialLoad else { return }
+
+        loadingStates[key] = true
+
+        // Check if all critical data is loaded
+        let allLoaded = loadingStates.values.allSatisfy { $0 }
+        if allLoaded {
+            isInitialLoad = false
+            DispatchQueue.main.async {
+                self.hideLoadingOverlay()
+            }
         }
-        let keyLines = lines[(startIndex + 1) ..< endIndex]
-        return keyLines.joined()
     }
 
-    private func sendEncryptedCommand(payload: CommandPayload, completion: @escaping (Bool, String?) -> Void) {
-        var missingFields = [String]()
-        if sharedSecret.isEmpty { missingFields.append("sharedSecret") }
-        if apnsKey.isEmpty { missingFields.append("apnsKey") }
-        if keyId.isEmpty { missingFields.append("keyId") }
-        if user.isEmpty { missingFields.append("user") }
-        if deviceToken.isEmpty { missingFields.append("deviceToken") }
-        if bundleId.isEmpty { missingFields.append("bundleId") }
-        if teamId.isEmpty { missingFields.append("teamId") }
-
-        if !missingFields.isEmpty {
-            let errorMessage = "Missing required fields for command: \(missingFields.joined(separator: ", "))"
-            LogManager.shared.log(category: .apns, message: errorMessage)
-            completion(false, errorMessage)
-            return
+    @objc private func navigateOnLAForeground() {
+        let orderedItems = Storage.shared.orderedTabBarItems()
+        if Observable.shared.currentAlarm.value != nil,
+           let snoozerIndex = orderedItems.firstIndex(of: .snoozer)
+        {
+            Observable.shared.selectedTabIndex.value = snoozerIndex
+        } else {
+            Observable.shared.selectedTabIndex.value = 0
         }
+    }
 
-        if let validationErrors = validateCredentials() {
-            let errorMessage = "Credential validation failed: \(validationErrors.joined(separator: ", "))"
-            LogManager.shared.log(category: .apns, message: errorMessage)
-            completion(false, errorMessage)
-            return
-        }
-
-        guard let url = constructAPNsURL() else {
-            let errorMessage = "Failed to construct APNs URL"
-            LogManager.shared.log(category: .apns, message: errorMessage)
-            completion(false, errorMessage)
-            return
-        }
-
-        guard let jwt = JWTManager.shared.getOrGenerateJWT(keyId: keyId, teamId: teamId, apnsKey: apnsKey) else {
-            let errorMessage = "Failed to generate JWT, please check that the token is correct."
-            LogManager.shared.log(category: .apns, message: errorMessage)
-            completion(false, errorMessage)
-            return
-        }
-
-        do {
-            guard let messenger = SecureMessenger(sharedSecret: sharedSecret) else {
-                let errorMessage = "Failed to initialize security module. Check shared secret."
-                LogManager.shared.log(category: .apns, message: errorMessage)
-                completion(false, errorMessage)
+    @objc private func statsViewTapped() {
+        #if !targetEnvironment(macCatalyst)
+            let orderedItems = Storage.shared.orderedTabBarItems()
+            if let statsIndex = orderedItems.firstIndex(of: .stats) {
+                Observable.shared.selectedTabIndex.value = statsIndex
                 return
             }
+        #endif
 
-            let encryptedDataString = try messenger.encrypt(payload)
-            let finalMessage = EncryptedPushMessage(encryptedData: encryptedDataString, commandType: payload.commandType)
+        let statsModalView = AggregatedStatsModalView(mainViewController: self)
+        let hostingController = UIHostingController(rootView: statsModalView)
+        hostingController.overrideUserInterfaceStyle = Storage.shared.appearanceMode.value.userInterfaceStyle
+        hostingController.modalPresentationStyle = .fullScreen
+        present(hostingController, animated: true)
+    }
 
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.setValue("bearer \(jwt)", forHTTPHeaderField: "authorization")
-            request.setValue("application/json", forHTTPHeaderField: "content-type")
-            request.setValue("10", forHTTPHeaderField: "apns-priority")
-            request.setValue(String(Int(payload.timestamp + (payload.smartMeal == nil ? 600 : 120))), forHTTPHeaderField: "apns-expiration")
-            request.setValue(bundleId, forHTTPHeaderField: "apns-topic")
-            request.setValue("alert", forHTTPHeaderField: "apns-push-type")
-            request.setValue(payload.smartMeal?.id.uuidString ?? payload.commandType.rawValue, forHTTPHeaderField: "apns-collapse-id")
+    // Update the Home Screen Quick Action for toggling the "Speak BG" feature based on the current speakBG setting.
+    func updateQuickActions() {
+        let iconName = Storage.shared.speakBG.value ? "pause.circle.fill" : "play.circle.fill"
+        let iconTemplate = UIApplicationShortcutIcon(systemImageName: iconName)
 
-            request.httpBody = try JSONEncoder().encode(finalMessage)
+        let shortcut = UIApplicationShortcutItem(type: Bundle.main.bundleIdentifier! + ".toggleSpeakBG",
+                                                 localizedTitle: "Speak BG",
+                                                 localizedSubtitle: nil,
+                                                 icon: iconTemplate,
+                                                 userInfo: nil)
+        UIApplication.shared.shortcutItems = [shortcut]
+    }
 
-            let task = URLSession.shared.dataTask(with: request) { data, response, error in
-                if let error = error {
-                    let errorMessage = "Failed to send push notification: \(error.localizedDescription)"
-                    LogManager.shared.log(category: .apns, message: errorMessage)
-                    completion(false, errorMessage)
-                    return
-                }
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
 
-                if let httpResponse = response as? HTTPURLResponse {
-                    LogManager.shared.log(category: .apns, message: "Push notification sent. Status code: \(httpResponse.statusCode)", isDebug: true)
+    // Clean all timers and start new ones when refreshing
+    @objc func refresh() {
+        LogManager.shared.log(category: .general, message: "Refreshing")
 
-                    var responseBodyMessage = ""
-                    if let data = data, let responseBody = String(data: data, encoding: .utf8) {
-                        LogManager.shared.log(category: .apns, message: "Response body: \(responseBody)", isDebug: true)
-                        if let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
-                           let reason = json["reason"] as? String
-                        {
-                            responseBodyMessage = reason
-                        }
-                    }
+        Observable.shared.minAgoText.value = "Refreshing"
+        scheduleAllTasks()
+        NightscoutSocketManager.shared.connectIfNeeded()
 
-                    switch httpResponse.statusCode {
-                    case 200:
-                        completion(true, nil)
-                    case 400:
-                        completion(false, "Bad request. The request was invalid or malformed. \(responseBodyMessage)")
-                    case 403:
-                        JWTManager.shared.invalidateCache()
-                        completion(false, "Authentication error. Check your certificate or authentication token. \(responseBodyMessage)")
-                    case 404:
-                        completion(false, "Invalid request: The :path value was incorrect. \(responseBodyMessage)")
-                    case 405:
-                        completion(false, "Invalid request: Only POST requests are supported. \(responseBodyMessage)")
-                    case 410:
-                        completion(false, "The device token is no longer active for the topic. \(responseBodyMessage)")
-                    case 413:
-                        completion(false, "Payload too large. The notification payload exceeded the size limit. \(responseBodyMessage)")
-                    case 429:
-                        completion(false, "Too many requests. \(responseBodyMessage)")
-                    case 500:
-                        completion(false, "Internal server error at APNs. \(responseBodyMessage)")
-                    case 503:
-                        completion(false, "Service unavailable. The server is temporarily unavailable. Try again later. \(responseBodyMessage)")
-                    default:
-                        completion(false, "Unexpected status code: \(httpResponse.statusCode). \(responseBodyMessage)")
-                    }
-                } else {
-                    completion(false, "Failed to get a valid HTTP response.")
-                }
-            }
-            task.resume()
+        currentCage = nil
+        currentSage = nil
+        currentIage = nil
+    }
 
-        } catch {
-            let errorMessage = "Failed to encode or encrypt push message: \(error.localizedDescription)"
-            LogManager.shared.log(category: .apns, message: errorMessage)
-            completion(false, errorMessage)
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        UIApplication.shared.isIdleTimerDisabled = Storage.shared.screenlockSwitchState.value
+
+        if Observable.shared.chartSettingsChanged.value {
+            updateBGGraphSettings()
+            Observable.shared.chartSettingsChanged.value = false
         }
     }
 
-    private func constructAPNsURL() -> URL? {
-        let host = productionEnvironment ? "api.push.apple.com" : "api.sandbox.push.apple.com"
-        let urlString = "https://\(host)/3/device/\(deviceToken)"
-        return URL(string: urlString)
+    @objc func appMovedToBackground() {
+        LogManager.shared.log(
+            category: .general,
+            message: "App moved to background (refreshType=\(Storage.shared.backgroundRefreshType.value.rawValue), lowPowerMode=\(ProcessInfo.processInfo.isLowPowerModeEnabled), backgroundRefreshStatus=\(Self.describe(UIApplication.shared.backgroundRefreshStatus)))"
+        )
+
+        // Allow screen to turn off
+        UIApplication.shared.isIdleTimerDisabled = false
+
+        // We want to always come back to the home screen
+        Observable.shared.selectedTabIndex.value = 0
+
+        if Storage.shared.backgroundRefreshType.value == .silentTune {
+            backgroundTask.startBackgroundTask()
+            BackgroundRefreshManager.shared.scheduleRefresh()
+        }
+
+        if Storage.shared.backgroundRefreshType.value != .none {
+            BackgroundAlertManager.shared.startBackgroundAlert()
+        }
+
+        NightscoutSocketManager.shared.disconnect()
+    }
+
+    // Migrations must only run when UserDefaults is accessible (i.e. after first unlock).
+    // When the app is launched in the background by BGAppRefreshTask immediately after a
+    // reboot, the device may be in Before-First-Unlock (BFU) state: UserDefaults files are
+    // still encrypted, so every read returns the default value (0 / ""). Running migrations
+    // in that state would overwrite real settings with empty strings.
+    //
+    // Strategy: skip migrations if applicationState == .background; call this method again
+    // from appCameToForeground() so they run on the first foreground after a BFU launch.
+    func runMigrationsIfNeeded() {
+        guard UIApplication.shared.applicationState != .background else { return }
+
+        // Capture before migrations run: true for existing users, false for fresh installs.
+        let isExistingUser = Storage.shared.migrationStep.exists
+
+        // When adding a new migration step below:
+        //   1. Bump the `migrationStep` defaultValue in Storage.swift to the new latest step
+        //      number so fresh installs skip every migration.
+        //   2. Update any other StorageValue defaults in Storage.swift that this new step
+        //      mutates, so a fresh install ends up in the same state as a migrated user.
+
+        // Step 2: Released in v3.1.0 (2025-07-21). Can be removed after 2026-07-21.
+        if Storage.shared.migrationStep.value < 2 {
+            Storage.shared.migrateStep2()
+            Storage.shared.migrationStep.value = 2
+        }
+
+        // Step 3: Released in v4.5.0 (2026-02-01). Can be removed after 2027-02-01.
+        if Storage.shared.migrationStep.value < 3 {
+            Storage.shared.migrateStep3()
+            Storage.shared.migrationStep.value = 3
+        }
+
+        // Step 4: Released in v5.0.0 (2026-03-20). Can be removed after 2027-03-20.
+        if Storage.shared.migrationStep.value < 4 {
+            // Existing users need to see the fat/protein order change banner.
+            // New users never saw the old order, so mark it as already seen.
+            Storage.shared.hasSeenFatProteinOrderChange.value = !isExistingUser
+            Storage.shared.migrationStep.value = 4
+        }
+
+        // Step 5: Released in v5.0.0 (2026-03-20). Can be removed after 2027-03-20.
+        if Storage.shared.migrationStep.value < 5 {
+            Storage.shared.migrateStep5()
+            Storage.shared.migrationStep.value = 5
+        }
+
+        if Storage.shared.migrationStep.value < 6 {
+            Storage.shared.migrateStep6()
+            Storage.shared.migrationStep.value = 6
+        }
+
+        if Storage.shared.migrationStep.value < 7 {
+            Storage.shared.migrateStep7()
+            Storage.shared.migrationStep.value = 7
+        }
+
+        if Storage.shared.migrationStep.value < 8 {
+            Storage.shared.migrateStep8()
+            Storage.shared.migrationStep.value = 8
+        }
+
+        if Storage.shared.migrationStep.value < 9 {
+            Storage.shared.migrateStep9()
+            Storage.shared.migrationStep.value = 9
+        }
+
+        if Storage.shared.migrationStep.value < 10 {
+            Storage.shared.migrateStep10()
+            Storage.shared.migrationStep.value = 10
+        }
+    }
+
+    @objc func appDidBecomeActive() {
+        // applicationState == .active is guaranteed here, so the BFU guard in
+        // runMigrationsIfNeeded() will always pass. Catches the case where viewDidLoad
+        // ran during a BGAppRefreshTask background launch and deferred migrations.
+        runMigrationsIfNeeded()
+    }
+
+    @objc func handleBFUReloadCompleted() {
+        // Show the loading overlay so the user sees feedback during the 2-5s
+        // while tasks re-run with the now-correct credentials. Tasks scheduled
+        // before reload used url='' and rescheduled themselves 60s out — reset
+        // them so they run within their normal 2-5s initial delay.
+        loadingStates = ["bg": false, "profile": false, "deviceStatus": false]
+        isInitialLoad = true
+        setupLoadingState()
+        showLoadingOverlay()
+        scheduleAllTasks()
+    }
+
+    private static func describe(_ status: UIBackgroundRefreshStatus) -> String {
+        switch status {
+        case .available: "available"
+        case .denied: "denied"
+        case .restricted: "restricted"
+        @unknown default: "unknown"
+        }
+    }
+
+    @objc func appCameToForeground() {
+        LogManager.shared.log(category: .general, message: "App came to foreground")
+
+        // BFU recovery (StorageReadiness.recover) is driven by AppDelegate before this
+        // controller exists (the readiness gate), so handleBFUReloadCompleted() above
+        // is a vestigial no-op in the gated flow.
+
+        // reset screenlock state if needed
+        UIApplication.shared.isIdleTimerDisabled = Storage.shared.screenlockSwitchState.value
+
+        if Storage.shared.backgroundRefreshType.value == .silentTune {
+            backgroundTask.stopBackgroundTask()
+        }
+
+        if Storage.shared.backgroundRefreshType.value != .none {
+            BackgroundAlertManager.shared.stopBackgroundAlert()
+        }
+
+        TaskScheduler.shared.checkTasksNow()
+        NightscoutSocketManager.shared.connectIfNeeded()
+
+        checkAndNotifyVersionStatus()
+        checkAppExpirationStatus()
+    }
+
+    func checkAndNotifyVersionStatus() {
+        let versionManager = AppVersionManager()
+        versionManager.checkForNewVersion { latestVersion, isNewer, isBlacklisted in
+            let now = Date()
+
+            // Check if the current version is blacklisted, or if there is a newer version available
+            if isBlacklisted {
+                let lastBlacklistShown = Storage.shared.lastBlacklistNotificationShown.value ?? Date.distantPast
+                if now.timeIntervalSince(lastBlacklistShown) > 86400 { // 24 hours
+                    self.versionAlert(message: "The current version has a critical issue and should be updated as soon as possible.")
+                    Storage.shared.lastBlacklistNotificationShown.value = now
+                    Storage.shared.lastVersionUpdateNotificationShown.value = now
+                }
+            } else if isNewer {
+                let lastVersionUpdateShown = Storage.shared.lastVersionUpdateNotificationShown.value ?? Date.distantPast
+                if now.timeIntervalSince(lastVersionUpdateShown) > 1_209_600 { // 2 weeks
+                    self.versionAlert(message: "A new version is available: \(latestVersion ?? "Unknown"). It is recommended to update.")
+                    Storage.shared.lastVersionUpdateNotificationShown.value = now
+                }
+            }
+        }
+    }
+
+    func versionAlert(title: String = "Update Available", message: String) {
+        DispatchQueue.main.async {
+            let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
+            self.present(alert, animated: true)
+        }
+    }
+
+    func checkAppExpirationStatus() {
+        let now = Date()
+        let expirationDate = BuildDetails.default.calculateExpirationDate()
+        let weekBeforeExpiration = Calendar.current.date(byAdding: .day, value: -7, to: expirationDate)!
+
+        if now >= weekBeforeExpiration {
+            let lastExpirationShown = Storage.shared.lastExpirationNotificationShown.value ?? Date.distantPast
+            if now.timeIntervalSince(lastExpirationShown) > 86400 { // 24 hours
+                expirationAlert()
+                Storage.shared.lastExpirationNotificationShown.value = now
+            }
+        }
+    }
+
+    func expirationAlert() {
+        DispatchQueue.main.async {
+            let alert = UIAlertController(title: "App Expiration Warning", message: "This app will expire in less than a week. Please rebuild to continue using it.", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
+            self.present(alert, animated: true)
+        }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        showHideNSDetails()
+
+        // Re-render the graph every time Home appears. The single MainViewController
+        // is reused across tab/Menu hosts, so its chart view gets re-parented when
+        // the user switches to Home or moves it between the tab bar and the Menu —
+        // and Charts does not redraw itself after a re-parent. Rebuilding here keeps
+        // the curve visible regardless of how Home was reached. It also recovers the
+        // one-shot firstGraphLoad zoom that is skipped while the view is off-screen
+        // (force-loaded headless when Home lives in the Menu). Deferred one runloop
+        // so the nested SwiftUI chart has its final frame; updateBGGraph's own
+        // width>0 guard skips the initial zoom until it does.
+        if !bgData.isEmpty {
+            DispatchQueue.main.async { [weak self] in
+                self?.updateBGGraph()
+            }
+        }
+
+        #if !targetEnvironment(macCatalyst)
+            LiveActivityManager.shared.startFromCurrentState()
+        #endif
+    }
+
+    func stringFromTimeInterval(interval: TimeInterval) -> String {
+        let interval = Int(interval)
+        let minutes = (interval / 60) % 60
+        let hours = (interval / 3600)
+        return String(format: "%02d:%02d", hours, minutes)
+    }
+
+    func showHideNSDetails() {
+        // Info table visibility is handled reactively by MainHomeView.
+    }
+
+    func updateBadge(val: Int) {
+        if Storage.shared.appBadge.value {
+            let latestBG = String(val)
+            UIApplication.shared.applicationIconBadgeNumber = Int(Localizer.removePeriodAndCommaForBadge(Localizer.toDisplayUnits(latestBG))) ?? val
+        } else {
+            UIApplication.shared.applicationIconBadgeNumber = 0
+        }
+    }
+
+    func updateBGTextAppearance() {
+        if bgData.count > 0 {
+            let latestBG = bgData[bgData.count - 1].sgv
+            if Storage.shared.colorBGText.value {
+                let thresholds = UnitSettingsStore.shared.effectiveThresholds()
+                if Double(latestBG) >= thresholds.high {
+                    Observable.shared.bgTextColor.value = .yellow
+                } else if Double(latestBG) <= thresholds.low {
+                    Observable.shared.bgTextColor.value = .red
+                } else {
+                    Observable.shared.bgTextColor.value = .green
+                }
+            } else {
+                Observable.shared.bgTextColor.value = .primary
+            }
+        }
+    }
+
+    func updateAppearance(_ mode: AppearanceMode) {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first else { return }
+
+        let style: UIUserInterfaceStyle
+        switch mode {
+        case .light:
+            style = .light
+        case .dark:
+            style = .dark
+        case .system:
+            // Use .unspecified to follow system
+            style = .unspecified
+        }
+
+        // Update this view controller
+        overrideUserInterfaceStyle = style
+
+        // Update the window (affects the entire app including modals)
+        window.overrideUserInterfaceStyle = style
+    }
+
+    func bgDirectionGraphic(_ value: String) -> String {
+        let // graphics:[String:String]=["Flat":"\u{2192}","DoubleUp":"\u{21C8}","SingleUp":"\u{2191}","FortyFiveUp":"\u{2197}\u{FE0E}","FortyFiveDown":"\u{2198}\u{FE0E}","SingleDown":"\u{2193}","DoubleDown":"\u{21CA}","None":"-","NOT COMPUTABLE":"-","RATE OUT OF RANGE":"-"]
+            graphics: [String: String] = ["Flat": "→", "DoubleUp": "↑↑", "SingleUp": "↑", "FortyFiveUp": "↗", "FortyFiveDown": "↘︎", "SingleDown": "↓", "DoubleDown": "↓↓", "None": "-", "NONE": "-", "NOT COMPUTABLE": "-", "RATE OUT OF RANGE": "-", "": "-"]
+        return graphics[value]!
+    }
+
+    func writeCalendar() {
+        store.requestCalendarAccess { granted, error in
+            if !granted {
+                LogManager.shared.log(category: .calendar, message: "Failed to get calendar access: \(String(describing: error))")
+                return
+            }
+            self.processCalendarUpdates()
+        }
+    }
+
+    func processCalendarUpdates() {
+        if Storage.shared.calendarIdentifier.value == "" { return }
+
+        if bgData.count < 1 { return }
+
+        // This lets us fire the method to write Min Ago entries only once a minute starting after 6 minutes but allows new readings through
+        let now = dateTimeUtils.getNowTimeIntervalUTC()
+        let newestBGDate = bgData[bgData.count - 1].date
+
+        if lastCalDate == newestBGDate {
+            if (now - lastCalendarWriteAttemptTime) < 60 || (now - newestBGDate) < 360 {
+                return
+            }
+        }
+
+        // Create Event info
+        var deltaBG = 0 // protect index out of bounds
+        if bgData.count > 1 {
+            deltaBG = bgData[bgData.count - 1].sgv - bgData[bgData.count - 2].sgv as Int
+        }
+        let deltaTime = (TimeInterval(Date().timeIntervalSince1970) - bgData[bgData.count - 1].date) / 60
+        var deltaString = ""
+        if deltaBG < 0 {
+            deltaString = Localizer.toDisplayUnits(String(deltaBG))
+        } else {
+            deltaString = "+" + Localizer.toDisplayUnits(String(deltaBG))
+        }
+        let direction = bgDirectionGraphic(bgData[bgData.count - 1].direction ?? "")
+
+        let eventStartDate = Date(timeIntervalSince1970: bgData[bgData.count - 1].date)
+        var eventEndDate = eventStartDate.addingTimeInterval(60 * 10)
+        var eventTitle = Storage.shared.watchLine1.value
+        if Storage.shared.watchLine2.value.count > 1 {
+            eventTitle += "\n" + Storage.shared.watchLine2.value
+        }
+        eventTitle = eventTitle.replacingOccurrences(of: "%BG%", with: Localizer.toDisplayUnits(String(bgData[bgData.count - 1].sgv)))
+        eventTitle = eventTitle.replacingOccurrences(of: "%DIRECTION%", with: direction)
+        eventTitle = eventTitle.replacingOccurrences(of: "%DELTA%", with: deltaString)
+        if currentOverride != 1.0 {
+            let val = Int(currentOverride * 100)
+            // let overrideText = String(format:"%f1", self.currentOverride*100)
+            let text = String(val) + "%"
+            eventTitle = eventTitle.replacingOccurrences(of: "%OVERRIDE%", with: text)
+        } else {
+            eventTitle = eventTitle.replacingOccurrences(of: "%OVERRIDE%", with: "")
+        }
+        eventTitle = eventTitle.replacingOccurrences(of: "%LOOP%", with: latestLoopStatusString)
+        var minAgo = ""
+        if deltaTime > 9 {
+            // write old BG reading and continue pushing out end date to show last entry
+            minAgo = String(Int(deltaTime)) + " min"
+            eventEndDate = eventStartDate.addingTimeInterval((60 * 10) + (deltaTime * 60))
+        }
+        var basal = "~"
+        if latestBasal != "" {
+            basal = latestBasal
+        }
+        eventTitle = eventTitle.replacingOccurrences(of: "%MINAGO%", with: minAgo)
+        eventTitle = eventTitle.replacingOccurrences(of: "%IOB%", with: latestIOB?.formattedValue() ?? "0")
+        eventTitle = eventTitle.replacingOccurrences(of: "%COB%", with: latestCOB?.formattedValue() ?? "0")
+        eventTitle = eventTitle.replacingOccurrences(of: "%BASAL%", with: basal)
+
+        // Delete Events from last 2 hours and 2 hours in future
+        let deleteStartDate = Date().addingTimeInterval(-60 * 60 * 2)
+        let deleteEndDate = Date().addingTimeInterval(60 * 60 * 2)
+        // guard solves for some ios upgrades removing the calendar
+        guard let deleteCalendar = store.calendar(withIdentifier: Storage.shared.calendarIdentifier.value) as? EKCalendar else { return }
+        let predicate2 = store.predicateForEvents(withStart: deleteStartDate, end: deleteEndDate, calendars: [deleteCalendar])
+        let eVDelete = store.events(matching: predicate2) as [EKEvent]?
+        if eVDelete != nil {
+            for i in eVDelete! {
+                do {
+                    try store.remove(i, span: EKSpan.thisEvent, commit: true)
+                } catch {
+                    LogManager.shared.log(category: .calendar, message: "Failed to remove calendar event: \(error.localizedDescription)")
+                }
+            }
+        }
+
+        // Write New Event
+        let event = EKEvent(eventStore: store)
+        event.title = eventTitle
+        event.startDate = eventStartDate
+        event.endDate = eventEndDate
+        event.calendar = store.calendar(withIdentifier: Storage.shared.calendarIdentifier.value)
+        do {
+            try store.save(event, span: .thisEvent, commit: true)
+            lastCalendarWriteAttemptTime = now
+
+            lastCalDate = bgData[bgData.count - 1].date
+        } catch {
+            let msg = "Error storing to calendar: \(error.localizedDescription) (\(error))"
+            LogManager.shared.log(category: .calendar, message: msg)
+        }
+    }
+
+    func userNotificationCenter(_: UNUserNotificationCenter, didReceive _: UNNotificationResponse, withCompletionHandler _: @escaping () -> Void) {}
+
+    func calculateMaxBgGraphValue() -> Float {
+        return max(Float(topBG), Float(topPredictionBG))
+    }
+
+    func loadDebugData() {
+        struct DebugData: Codable {
+            let debug: Bool?
+            let url: String?
+            let token: String?
+        }
+
+        let fileManager = FileManager.default
+        let url = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!.appendingPathComponent("debugData.json")
+
+        if fileManager.fileExists(atPath: url.path) {
+            do {
+                let data = try Data(contentsOf: url)
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+
+                let debugData = try decoder.decode(DebugData.self, from: data)
+                LogManager.shared.log(category: .alarm, message: "Loaded DebugData from \(url.path)", isDebug: true)
+
+                if let debug = debugData.debug {
+                    Observable.shared.debug.value = debug
+                }
+
+                if let url = debugData.url {
+                    Storage.shared.url.value = url
+                }
+
+                if let token = debugData.token {
+                    Storage.shared.token.value = token
+                }
+            } catch {
+                LogManager.shared.log(category: .alarm, message: "Failed to load DebugData: \(error)", isDebug: true)
+            }
+        }
+    }
+
+    private func synchronizeInfoTypes() {
+        // Safety net: fold any leftover legacy infoSort/infoVisible into
+        // infoDisplayItems for users whose migrationStep predates that key.
+        Storage.shared.migrateInfoDisplayItems()
+
+        var items = Storage.shared.infoDisplayItems.value
+
+        // Drop items whose InfoType no longer exists.
+        let validTypes = Set(InfoType.allCases)
+        items.removeAll { !validTypes.contains($0.type) }
+
+        // Append any newly added InfoType.
+        let present = Set(items.map(\.type))
+        for type in InfoType.allCases where !present.contains(type) {
+            items.append(InfoDisplayItem(type: type, isVisible: type.defaultVisible, coloring: InfoColoring()))
+        }
+
+        // Apply the requested compact layout once. The rows remain available in
+        // Information Display settings, and later user choices are preserved.
+        if !Storage.shared.compactInfoLayoutApplied.value {
+            for index in items.indices where items[index].type == .sage || items[index].type == .cage {
+                items[index].isVisible = false
+            }
+            Storage.shared.infoDisplayItems.value = items
+            Storage.shared.compactInfoLayoutApplied.value = true
+        } else {
+            Storage.shared.infoDisplayItems.value = items
+        }
+    }
+
+    // MARK: - First Time Setup
+
+    private func checkAndShowImportButtonIfNeeded() {
+        // Check if this is first-time setup (no data source configured)
+        let isFirstTimeSetup = !isDataSourceConfigured()
+
+        if isFirstTimeSetup {
+            setupFirstTimeButtons()
+            hideAllDataUI()
+            // Hide loading overlay if it's showing and mark as not loading
+            if loadingOverlay != nil {
+                isInitialLoad = false
+                hideLoadingOverlay()
+            }
+        } else {
+            hideFirstTimeButtons()
+            // Only show data UI if we're not in initial loading state
+            if !isInitialLoad || loadingOverlay == nil {
+                showAllDataUI()
+            }
+        }
+    }
+
+    private func setupFirstTimeButtons() {
+        // Create Setup Nightscout button
+        if setupNightscoutButton == nil {
+            setupNightscoutButton = UIButton(type: .system)
+            setupNightscoutButton.setTitle("Setup Nightscout", for: .normal)
+            setupNightscoutButton.titleLabel?.font = UIFont.systemFont(ofSize: 18, weight: .medium)
+            setupNightscoutButton.backgroundColor = UIColor.systemBlue
+            setupNightscoutButton.setTitleColor(.white, for: .normal)
+            setupNightscoutButton.layer.cornerRadius = 12
+            setupNightscoutButton.layer.shadowColor = UIColor.black.cgColor
+            setupNightscoutButton.layer.shadowOffset = CGSize(width: 0, height: 2)
+            setupNightscoutButton.layer.shadowOpacity = 0.3
+            setupNightscoutButton.layer.shadowRadius = 4
+            setupNightscoutButton.addTarget(self, action: #selector(setupNightscoutTapped), for: .touchUpInside)
+
+            view.addSubview(setupNightscoutButton)
+            setupNightscoutButton.translatesAutoresizingMaskIntoConstraints = false
+
+            NSLayoutConstraint.activate([
+                setupNightscoutButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                setupNightscoutButton.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -30),
+                setupNightscoutButton.widthAnchor.constraint(equalToConstant: 200),
+                setupNightscoutButton.heightAnchor.constraint(equalToConstant: 50),
+            ])
+        }
+
+        // Create Setup Dexcom Share button
+        if setupDexcomButton == nil {
+            setupDexcomButton = UIButton(type: .system)
+            setupDexcomButton.setTitle("Setup Dexcom Share", for: .normal)
+            setupDexcomButton.titleLabel?.font = UIFont.systemFont(ofSize: 18, weight: .medium)
+            setupDexcomButton.backgroundColor = UIColor.systemGreen
+            setupDexcomButton.setTitleColor(.white, for: .normal)
+            setupDexcomButton.layer.cornerRadius = 12
+            setupDexcomButton.layer.shadowColor = UIColor.black.cgColor
+            setupDexcomButton.layer.shadowOffset = CGSize(width: 0, height: 2)
+            setupDexcomButton.layer.shadowOpacity = 0.3
+            setupDexcomButton.layer.shadowRadius = 4
+            setupDexcomButton.addTarget(self, action: #selector(setupDexcomTapped), for: .touchUpInside)
+
+            view.addSubview(setupDexcomButton)
+            setupDexcomButton.translatesAutoresizingMaskIntoConstraints = false
+
+            NSLayoutConstraint.activate([
+                setupDexcomButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                setupDexcomButton.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: 30),
+                setupDexcomButton.widthAnchor.constraint(equalToConstant: 200),
+                setupDexcomButton.heightAnchor.constraint(equalToConstant: 50),
+            ])
+        }
+
+        setupNightscoutButton.isHidden = false
+        setupDexcomButton.isHidden = false
+    }
+
+    private func hideFirstTimeButtons() {
+        setupNightscoutButton?.isHidden = true
+        setupDexcomButton?.isHidden = true
+    }
+
+    @objc private func setupNightscoutTapped() {
+        let navController = UINavigationController()
+        let nightscoutSettingsView = NightscoutSettingsView(viewModel: .init(), usesModalCloseButton: true, onContinueToUnits: { [weak navController] in
+            let unitsView = UnitsOnboardingView {
+                navController?.dismiss(animated: true)
+            }
+            let unitsController = UIHostingController(rootView: unitsView)
+            let style = Storage.shared.appearanceMode.value.userInterfaceStyle
+            unitsController.overrideUserInterfaceStyle = style
+            navController?.pushViewController(unitsController, animated: true)
+        }, onImportSettings: { [weak navController] in
+            let importSettingsView = ImportExportSettingsView()
+            let importSettingsController = UIHostingController(rootView: importSettingsView)
+            let style = Storage.shared.appearanceMode.value.userInterfaceStyle
+            importSettingsController.overrideUserInterfaceStyle = style
+            navController?.pushViewController(importSettingsController, animated: true)
+        })
+        let hostingController = UIHostingController(rootView: nightscoutSettingsView)
+
+        // Apply appearance mode
+        let style = Storage.shared.appearanceMode.value.userInterfaceStyle
+        hostingController.overrideUserInterfaceStyle = style
+        navController.overrideUserInterfaceStyle = style
+
+        navController.setViewControllers([hostingController], animated: false)
+        hostingController.navigationItem.rightBarButtonItem = makeCloseBarButtonItem()
+
+        navController.modalPresentationStyle = .pageSheet
+        present(navController, animated: true)
+    }
+
+    @objc private func setupDexcomTapped() {
+        let navController = UINavigationController()
+        let dexcomSettingsView = DexcomSettingsView(viewModel: .init(), usesModalCloseButton: true, onContinueToUnits: { [weak navController] in
+            let unitsView = UnitsOnboardingView {
+                navController?.dismiss(animated: true)
+            }
+            let unitsController = UIHostingController(rootView: unitsView)
+            let style = Storage.shared.appearanceMode.value.userInterfaceStyle
+            unitsController.overrideUserInterfaceStyle = style
+            navController?.pushViewController(unitsController, animated: true)
+        })
+        let hostingController = UIHostingController(rootView: dexcomSettingsView)
+
+        // Apply appearance mode
+        let style = Storage.shared.appearanceMode.value.userInterfaceStyle
+        hostingController.overrideUserInterfaceStyle = style
+        navController.overrideUserInterfaceStyle = style
+
+        navController.setViewControllers([hostingController], animated: false)
+        hostingController.navigationItem.rightBarButtonItem = makeCloseBarButtonItem()
+
+        navController.modalPresentationStyle = .pageSheet
+        present(navController, animated: true)
+    }
+
+    private func makeCloseBarButtonItem() -> UIBarButtonItem {
+        let button = UIBarButtonItem(barButtonSystemItem: .close, target: self, action: #selector(dismissModal))
+        button.tintColor = .systemBlue
+        return button
+    }
+
+    private func hideAllDataUI() {
+        mainContentView?.isHidden = true
+    }
+
+    private func showAllDataUI() {
+        mainContentView?.isHidden = false
+    }
+
+    private func updateGraphVisibility() {
+        // Graph and component visibility is handled reactively by MainHomeView.
+        // This method now only manages the overall content visibility for first-time setup.
+        if !isDataSourceConfigured() {
+            mainContentView?.isHidden = true
+        }
+    }
+
+    @objc private func importSettingsButtonTapped() {
+        presentImportSettingsView()
+    }
+
+    private func presentImportSettingsView() {
+        let importExportView = ImportExportSettingsView()
+        let hostingController = UIHostingController(rootView: importExportView)
+        hostingController.modalPresentationStyle = .pageSheet
+
+        present(hostingController, animated: true)
+    }
+
+    @objc private func dismissModal() {
+        dismiss(animated: true) { [weak self] in
+            guard let self = self else { return }
+
+            // Check if user just configured a data source
+            if self.isDataSourceConfigured(), self.loadingOverlay == nil {
+                // Reset loading states for fresh load
+                self.loadingStates = [
+                    "bg": false,
+                    "profile": false,
+                    "deviceStatus": false,
+                ]
+                self.isInitialLoad = true
+
+                // Show loading overlay and trigger refresh
+                self.setupLoadingState()
+                self.showLoadingOverlay()
+                self.refresh()
+            }
+        }
+    }
+}
+
+extension MainViewController: AVSpeechSynthesizerDelegate {
+    func speechSynthesizer(_: AVSpeechSynthesizer, didFinish _: AVSpeechUtterance) {
+        let appState = UIApplication.shared.applicationState
+        let isSilentTuneMode = Storage.shared.backgroundRefreshType.value == .silentTune
+
+        if isSilentTuneMode, appState == .background {
+            LogManager.shared.log(category: .general, message: "Silent tune active in background; not deactivating session.", isDebug: true)
+        } else {
+            do {
+                try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+                LogManager.shared.log(category: .general, message: "Audio session deactivated after speech.", isDebug: true)
+            } catch {
+                LogManager.shared.log(category: .alarm, message: "Failed to deactivate audio session: \(error)")
+            }
+        }
     }
 }

@@ -40,7 +40,14 @@ extension MainViewController {
     // NS Treatments Web Call
     // Downloads Basal, Bolus, Carbs, BG Check, Notes, Overrides
     func WebLoadNSTreatments() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { self.WebLoadNSTreatments() }
+            return
+        }
         if !Storage.shared.downloadTreatments.value { return }
+        guard !isFetchingNSTreatments else { return }
+        isFetchingNSTreatments = true
+        let requestedSource = Storage.shared.url.value
 
         let startTimeString = dateTimeUtils.getDateTimeString(addingDays: -1 * Storage.shared.downloadDays.value)
         let endTimeString = dateTimeUtils.getDateTimeString(addingHours: 6)
@@ -51,17 +58,19 @@ extension MainViewController {
             "count": "\(estimatedCount)",
         ]
         NightscoutUtils.executeDynamicRequest(eventType: .treatments, parameters: parameters) { (result: Result<Any, Error>) in
-            switch result {
-            case let .success(data):
-                if let entries = data as? [[String: AnyObject]] {
-                    DispatchQueue.main.async {
+            DispatchQueue.main.async {
+                self.isFetchingNSTreatments = false
+                guard Storage.shared.url.value == requestedSource else { return }
+                switch result {
+                case let .success(data):
+                    if let entries = data as? [[String: AnyObject]] {
                         self.updateTreatments(entries: entries)
+                    } else {
+                        LogManager.shared.log(category: .nightscout, message: "WebLoadNSTreatments, Unexpected data structure")
                     }
-                } else {
-                    LogManager.shared.log(category: .nightscout, message: "WebLoadNSTreatments, Unexpected data structure")
+                case let .failure(error):
+                    LogManager.shared.log(category: .nightscout, message: "WebLoadNSTreatments, error \(error.localizedDescription)")
                 }
-            case let .failure(error):
-                LogManager.shared.log(category: .nightscout, message: "WebLoadNSTreatments, error \(error.localizedDescription)")
             }
         }
     }

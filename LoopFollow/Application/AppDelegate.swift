@@ -138,6 +138,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     /// Called when a remote notification is received
     func application(_: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        RemoteCommandRefresh.receivedResponse(userInfo)
         let userInfoKeys = userInfo.keys.compactMap { $0 as? String }.sorted()
         LogManager.shared.log(category: .apns, message: "Received remote notification: keys=\(userInfoKeys)")
 
@@ -189,6 +190,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func userNotificationCenter(_: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        RemoteCommandRefresh.receivedResponse(response.notification.request.content.userInfo)
         if response.actionIdentifier == "OPEN_APP_ACTION" {
             // Dismiss any presented modal/sheet so the user actually sees Home
             UIApplication.shared.topMost?.dismiss(animated: true)
@@ -273,6 +275,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void)
     {
         let content = notification.request.content
+        RemoteCommandRefresh.receivedResponse(content.userInfo)
         let userInfoKeys = content.userInfo.keys.compactMap { $0 as? String }.sorted()
         LogManager.shared.log(
             category: .general,

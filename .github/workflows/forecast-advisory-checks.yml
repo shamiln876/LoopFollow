@@ -1,7 +1,7 @@
 name: Forecast advisory checks
 on:
   push:
-    branches: [fix/forecast-advisory-single-confirmation]
+    branches: [fix/forecast-advisory-single-confirmation, fix/remote-command-feedback]
   workflow_dispatch:
 permissions:
   contents: read
