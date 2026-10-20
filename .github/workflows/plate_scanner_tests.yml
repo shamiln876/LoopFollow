@@ -1,0 +1,25 @@
+name: Optional plate scanner tests
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'LoopFollow/Remote/TRC/PlateScan*'
+      - 'Tests/PlateScanTests.swift'
+      - 'Scripts/test-plate-scanner.sh'
+      - 'server/plate-scanner/**'
+      - '.github/workflows/plate_scanner_tests.yml'
+permissions:
+  contents: read
+jobs:
+  scanner:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test scanner logic and mocked provider
+        run: bash Scripts/test-plate-scanner.sh
+      - name: Validate deployable Worker without credentials or upload
+        working-directory: server/plate-scanner
+        run: npx --yes wrangler@4.151.1 deploy --dry-run --outdir "$RUNNER_TEMP/plate-scanner-worker"
