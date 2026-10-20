@@ -52,6 +52,7 @@ jobs:
           set -o pipefail
           xcodebuild -workspace LoopFollow.xcworkspace -scheme SmartMealUI \
             -parallel-testing-enabled NO \
+            -collect-test-diagnostics never \
             -configuration Debug -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
             -derivedDataPath "$RUNNER_TEMP/plate-native-build" \
             -resultBundlePath "$RUNNER_TEMP/plate-native.xcresult" \
