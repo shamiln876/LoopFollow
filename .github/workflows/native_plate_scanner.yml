@@ -16,7 +16,7 @@ permissions:
 jobs:
   native-scanner:
     runs-on: xcode-27
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - name: Select released Xcode 27 SDK
