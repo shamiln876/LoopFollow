@@ -31,6 +31,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - name: Verify only intended UI change and release workflow
         run: |
