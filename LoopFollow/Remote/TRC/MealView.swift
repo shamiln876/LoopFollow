@@ -422,6 +422,12 @@ struct MealView: View {
                         message += String(format: "\nBolus: %.2f U", bolusAmount)
                     }
 
+                    // A single confirmation covers both the meal and any forecast advisory.
+                    // Authentication and tap-time revalidation still precede sending.
+                    if let draft = advisorDraft, draft.lowPredictionAcknowledged, bolusAmount > 0 {
+                        message += "\nForecast advisory: Trio predicts a low before this new meal. These forecasts may be wrong and exclude the new meal. Review current glucose, trend and IOB. Confirm to accept and continue."
+                    }
+
                     return Alert(
                         title: Text("Confirm Meal"),
                         message: Text(message),

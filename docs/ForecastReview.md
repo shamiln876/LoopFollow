@@ -2,7 +2,7 @@
 
 Low pre-meal forecasts no longer impose the Advisor's extra, unconditional 70 mg/dL calculated-dose transfer block when the paired receiver supports review. The Advisor shows selected minimum, guard minimum and eventual endpoint separately. These are different model values and exclude the new meal.
 
-The user enters full carbs, reviews or edits upfront units, then taps **Use these values**. If a positive selected dose accompanies a selected/guard forecast below 70 mg/dL, **Review low forecast** displays the actual forecasts and selected meal/dose. **Cancel** stays in the Advisor; **Accept and continue** opens the standard editable Meal. Nothing is sent from the warning or Advisor. Standard confirmation/authentication remain.
+The user enters full carbs and reviews or edits upfront units, then transfers to the standard editable Meal. There is no separate forecast pop-up. The existing **Confirm Meal** alert includes the forecast advisory alongside the actual carbs and bolus; **Cancel** sends nothing, and **Confirm** proceeds through normal authentication and live-context revalidation. The Home card does not label a reviewable forecast as missing live data when the paired receiver advertises support. Actual-low, native severe-forecast, stale-data and compatibility checks remain. Nothing is sent directly from the Advisor.
 
 The acknowledgement belongs to one draft and its exact calculation/settings context, not a persistent setting. Changed snapshots or expired inputs require a new automatic review. A zero-insulin draft does not silently acknowledge a warning for insulin added later.
 

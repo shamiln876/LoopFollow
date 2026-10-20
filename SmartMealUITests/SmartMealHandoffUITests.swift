@@ -55,21 +55,21 @@ final class SmartMealHandoffUITests: XCTestCase {
         app.buttons["Hide keyboard"].firstMatch.tap()
         let use = app.buttons["advisor-review-meal"]
         XCTAssertTrue(use.isEnabled); use.tap()
-        let warning = app.alerts["Review low forecast"]
-        XCTAssertTrue(warning.waitForExistence(timeout: 5))
-        warning.buttons["Cancel"].tap()
-        XCTAssertTrue(use.waitForExistence(timeout: 5))
-        XCTAssertEqual(dose.value as? String, "0.65")
-        use.tap()
-        XCTAssertTrue(warning.waitForExistence(timeout: 5))
-        warning.buttons["Accept and continue"].tap()
+        XCTAssertFalse(app.alerts["Review low forecast"].exists)
         let mealDose = app.textFields["meal-input-bolus-amount"]
         for _ in 0 ..< 5 where !mealDose.isHittable {
             app.swipeUp()
         }
         XCTAssertTrue(mealDose.waitForExistence(timeout: 10))
         XCTAssertEqual(mealDose.value as? String, "0.65")
-        XCTAssertTrue(app.buttons["Send Meal"].exists)
+        let send = app.buttons["Send Meal"]
+        XCTAssertTrue(send.exists); send.tap()
+        let confirmation = app.alerts["Confirm Meal"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Forecast advisory")).firstMatch.exists)
+        confirmation.buttons["Cancel"].tap()
+        XCTAssertTrue(mealDose.exists)
+        XCTAssertEqual(mealDose.value as? String, "0.65")
         app.terminate()
     }
 

@@ -14,7 +14,7 @@ struct MealDashboardStatus {
 
     init(snapshot: MealReviewSnapshot?, samples: [MealReviewCalculation.GlucoseSample], newestTreatment: Date?, settings: MealReviewSettings?, source: String, now: Date) {
         glucose = MealReviewCalculation.latestGlucose(samples: samples, now: now)
-        reasons = MealReviewCalculation.reasons(snapshot: snapshot, samples: samples, newestTreatment: newestTreatment, now: now)
+        reasons = MealReviewCalculation.reasons(snapshot: snapshot, samples: samples, newestTreatment: newestTreatment, now: now, allowLowPredictionReview: snapshot?.smartMeal?.allowsLowPredictionReview == true)
             + MealReviewFullCalculation.reasons(settings: settings, snapshot: snapshot, source: source, now: now)
     }
 }
