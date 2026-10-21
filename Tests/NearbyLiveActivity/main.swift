@@ -13,6 +13,7 @@ func cloud(_ date: Double) -> GlucoseSnapshot {
 func select(_ cloud: GlucoseSnapshot?, _ enabled: Bool = true, _ date: Date = now) -> GlucoseSnapshot? {
     NearbyLiveActivitySnapshot.select(cloud: cloud, packet: packet, enabled: enabled, unit: .mmol, now: date)
 }
+
 let local = select(cloud(9900))!
 precondition(local.glucose == 180 && local.updatedAt.timeIntervalSince1970 == 9980)
 precondition(local.iob == 2 && local.cob == 15 && local.projected == nil && local.recBolus == nil)
