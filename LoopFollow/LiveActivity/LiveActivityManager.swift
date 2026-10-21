@@ -1035,7 +1035,7 @@ final class LiveActivityManager {
             return
         }
         if current == nil,
-           let existing = Activity<GlucoseLiveActivityAttributes>.activities.first(where: { $0.activityState == .active })
+           let existing = Activity<GlucoseLiveActivityAttributes>.activities.first(where: { $0.activityState == .active || $0.activityState == .stale })
         {
             // Skip activities already in .ended/.dismissed — those are corpses
             // (typically post-410 ends pending iOS dismissal). Binding to them
@@ -1066,7 +1066,7 @@ final class LiveActivityManager {
 
     func update(snapshot: GlucoseSnapshot, reason: String) {
         if current == nil,
-           let existing = Activity<GlucoseLiveActivityAttributes>.activities.first(where: { $0.activityState == .active })
+           let existing = Activity<GlucoseLiveActivityAttributes>.activities.first(where: { $0.activityState == .active || $0.activityState == .stale })
         {
             bind(to: existing, logReason: "bind-existing")
         }
@@ -1102,12 +1102,9 @@ final class LiveActivityManager {
 
             if Task.isCancelled { return }
 
-            // Dual-path update strategy:
-            // - Foreground: direct ActivityKit update works reliably.
-            // - Background: direct update silently fails due to the audio session
-            //   limitation. APNs self-push is the only reliable delivery path.
-            //   Both paths are attempted when applicable; APNs is the authoritative
-            //   background mechanism.
+            // Bluetooth callbacks grant background execution time. Use ActivityKit
+            // directly during that window; nearby updates never require APNs.
+            // Preserve the existing internet update path for cloud snapshots.
             let isForeground = await MainActor.run {
                 UIApplication.shared.applicationState == .active
             }

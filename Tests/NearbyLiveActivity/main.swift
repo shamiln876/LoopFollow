@@ -1,10 +1,15 @@
+// LoopFollow
+// main.swift
+
 import Foundation
 
 let now = Date(timeIntervalSince1970: 10000)
 let packet = NearbyPacket(generatedAt: 9990, glucoseDate: 9980, glucoseMgdl: 180, deltaMgdl: 9, iob: 2, iobDate: 9970, cob: 15, cobDate: 9960)
+
 func cloud(_ date: Double) -> GlucoseSnapshot {
     GlucoseSnapshot(glucose: 90, delta: -2, trend: .down, updatedAt: Date(timeIntervalSince1970: date), iob: 8, cob: 90, projected: 60, recBolus: 3, unit: .mmol, isNotLooping: true)
 }
+
 func select(_ cloud: GlucoseSnapshot?, _ enabled: Bool = true, _ date: Date = now) -> GlucoseSnapshot? {
     NearbyLiveActivitySnapshot.select(cloud: cloud, packet: packet, enabled: enabled, unit: .mmol, now: date)
 }

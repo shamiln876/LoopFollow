@@ -68,16 +68,16 @@ struct LoopFollowLiveActivityWidget: Widget {
                 LockScreenFamilyAdaptiveView(state: context.state)
                     .opacity(context.isStale && context.state.snapshot.nearbyExpiresAt != nil ? 0.35 : 1)
             }
-                .id(context.state.seq)
-                .background(
-                    LALivenessMarker(
-                        seq: context.state.seq,
-                        producedAt: context.state.producedAt
-                    )
+            .id(context.state.seq)
+            .background(
+                LALivenessMarker(
+                    seq: context.state.seq,
+                    producedAt: context.state.producedAt
                 )
-                .activitySystemActionForegroundColor(.white)
-                .contentMargins(.all, 0)
-                .widgetURL(URL(string: "\(AppGroupID.urlScheme)://la-tap")!)
+            )
+            .activitySystemActionForegroundColor(.white)
+            .contentMargins(.all, 0)
+            .widgetURL(URL(string: "\(AppGroupID.urlScheme)://la-tap")!)
         } dynamicIsland: { context in
             makeDynamicIsland(context: context)
         }
