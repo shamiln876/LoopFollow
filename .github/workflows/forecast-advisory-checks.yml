@@ -1,0 +1,30 @@
+name: Forecast advisory checks
+on:
+  push:
+    branches: [fix/forecast-advisory-single-confirmation, fix/remote-command-feedback]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: forecast-advisory-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode
+        run: sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
+      - name: Test calculation, forecast limits and delivery protocol without a pump
+        run: bash Scripts/test-smart-meal-core.sh
+      - name: Verify single confirmation and cancellation in simulator
+        run: |
+          set -o pipefail
+          xcrun simctl list devices available -j > /tmp/forecast-simulators.json
+          simulator_id=$(python3 -c 'import json; d=json.load(open("/tmp/forecast-simulators.json")); print(next(x["udid"] for k,v in d["devices"].items() if ".iOS-" in k for x in v if x.get("isAvailable") and x["name"].startswith("iPhone")))')
+          xcodebuild -workspace LoopFollow.xcworkspace -scheme SmartMealUI \
+            -configuration Debug -destination "platform=iOS Simulator,id=$simulator_id" \
+            -parallel-testing-enabled NO \
+            -only-testing:SmartMealUITests/SmartMealHandoffUITests/testLowForecastRequiresAcceptAndPreservesEditedDose \
+            CODE_SIGNING_ALLOWED=NO test

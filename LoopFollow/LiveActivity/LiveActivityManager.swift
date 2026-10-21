@@ -10,8 +10,8 @@ import os
 import UIKit
 import UserNotifications
 
-// Live Activity manager for LoopFollow. Every LA creation (start, renewal,
-// restart) and update goes through APNs push-to-start.
+// Live Activity manager for LoopFollow. Foreground starts use ActivityKit
+// directly; background renewal and remote updates continue to use APNs.
 
 final class LiveActivityManager {
     static let shared = LiveActivityManager()
@@ -496,9 +496,9 @@ final class LiveActivityManager {
         let startReason = nextStartReasonOverride ?? "user-start"
         nextStartReasonOverride = nil
 
-        // Push-to-start is used for every creation path. If an activity is
+        // Reuse an existing healthy activity. If an activity is
         // already running and not stale we adopt/reuse it (covers warm starts
-        // where the LA survived a relaunch); only truly new starts dispatch APNs.
+        // where the LA survived a relaunch); otherwise request a new activity.
         if let existing = Activity<GlucoseLiveActivityAttributes>.activities.first {
             let renewBy = Storage.shared.laRenewBy.value
             let now = Date().timeIntervalSince1970
@@ -685,8 +685,19 @@ final class LiveActivityManager {
         oldActivity: Activity<GlucoseLiveActivityAttributes>?,
         snapshot: GlucoseSnapshot? = nil
     ) {
-        // Validate APNs credentials up-front — push-to-start is the only
-        // transport, so missing/invalid creds mean the LA will never display.
+        guard Storage.shared.laEnabled.value, !dismissedByUser,
+              ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+
+        // A visible app can create an activity directly. Do this before APNs
+        // credentials/token/backoff checks: an accepted push need not create an
+        // activity, and retrying it cannot repair a stuck push-to-start token.
+        if isAppVisibleForLiveActivityStart(),
+           createForegroundActivity(reason: reason, oldActivity: oldActivity, snapshot: snapshot)
+        {
+            return
+        }
+
+        // Background creation still requires valid APNs credentials.
         let keyId = Storage.shared.lfKeyId.value
         let apnsKey = Storage.shared.lfApnsKey.value
         guard APNsCredentialValidator.isFullyConfigured(keyId: keyId, apnsKey: apnsKey) else {
@@ -736,6 +747,57 @@ final class LiveActivityManager {
                 oldActivity: oldActivity,
                 snapshot: workingSnapshot
             )
+        }
+    }
+
+    /// Returns true only after ActivityKit has actually created and bound an activity.
+    /// Preserve the reading's timestamp, including when using a cached snapshot.
+    @MainActor
+    private func createForegroundActivity(
+        reason: String,
+        oldActivity: Activity<GlucoseLiveActivityAttributes>?,
+        snapshot: GlucoseSnapshot?
+    ) -> Bool {
+        let provider = StorageCurrentGlucoseStateProvider()
+        guard let snapshot = snapshot ?? GlucoseSnapshotBuilder.build(from: provider)
+            ?? GlucoseSnapshotStore.shared.load()
+        else {
+            LogManager.shared.log(category: .general, message: "[LA] foreground start deferred — no glucose snapshot")
+            return false
+        }
+        let freshSnapshot = snapshot.withRenewalOverlay(false)
+        let deadline = Date().addingTimeInterval(LiveActivityManager.renewalThreshold)
+        let nextSeq = seq + 1
+        let state = GlucoseLiveActivityAttributes.ContentState(
+            snapshot: freshSnapshot,
+            seq: nextSeq,
+            reason: "foreground-\(reason)",
+            producedAt: Date(),
+        )
+        do {
+            let activity = try Activity<GlucoseLiveActivityAttributes>.request(
+                attributes: GlucoseLiveActivityAttributes(title: "LoopFollow"),
+                content: ActivityContent(state: state, staleDate: deadline, relevanceScore: 100),
+                pushType: .token,
+            )
+            seq = nextSeq
+            Storage.shared.laRenewBy.value = deadline.timeIntervalSince1970
+            Storage.shared.laRenewalFailed.value = false
+            pendingForegroundRestart = false
+            lastPushToStartSuccessAt = nil
+            pushToStartSendsWithoutAdoption = 0
+            GlucoseSnapshotStore.shared.save(freshSnapshot)
+            cancelRenewalFailedNotification()
+            bind(to: activity, logReason: "foreground-create")
+            // Keep the old activity until its replacement actually exists.
+            if let oldActivity, oldActivity.id != activity.id {
+                Task { await oldActivity.end(nil, dismissalPolicy: .immediate) }
+            }
+            LogManager.shared.log(category: .general, message: "[LA] foreground ActivityKit start succeeded id=\(activity.id)")
+            return true
+        } catch {
+            LogManager.shared.log(category: .general, message: "[LA] foreground ActivityKit start failed: \(error)")
+            return false
         }
     }
 

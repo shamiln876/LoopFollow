@@ -5,6 +5,7 @@ import HealthKit
 import SwiftUI
 
 struct TempTargetView: View {
+    var showsCloseButton = false
     @Environment(\.presentationMode) private var presentationMode
     private let pushNotificationManager = PushNotificationManager()
 
@@ -174,8 +175,15 @@ struct TempTargetView: View {
                     }
                 }
             }
-            .navigationTitle("Remote")
+            .navigationTitle("Temp Target")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if showsCloseButton {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Close") { presentationMode.wrappedValue.dismiss() }
+                    }
+                }
+            }
             .alert(isPresented: $showAlert) {
                 switch alertType {
                 case .confirmCommand:

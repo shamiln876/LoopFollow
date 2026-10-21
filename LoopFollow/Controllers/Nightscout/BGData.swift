@@ -272,6 +272,9 @@ extension MainViewController {
             TaskScheduler.shared.rescheduleTask(id: .minAgoUpdate, to: Date())
 
             let entries = self.bgData
+            Observable.shared.mealReviewGlucose.value = entries.suffix(24).map {
+                MealReviewCalculation.GlucoseSample(date: Date(timeIntervalSince1970: $0.date), mgdl: Double($0.sgv))
+            }
             if entries.count < 2 { // Protect index out of bounds
                 Storage.shared.lastBGChecked.value = Date()
                 return

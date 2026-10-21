@@ -53,6 +53,10 @@ struct MainHomeView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
 
+            if isNightscoutEnabled {
+                MealDashboardHomeCard()
+            }
+
             // Main chart (fills remaining space)
             BGChartView(model: chartModel, config: .main)
 
