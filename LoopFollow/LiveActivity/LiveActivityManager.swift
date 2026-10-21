@@ -180,7 +180,7 @@ final class LiveActivityManager {
         refreshWorkItem = nil
 
         let provider = StorageCurrentGlucoseStateProvider()
-        guard let snapshot = GlucoseSnapshotBuilder.build(from: provider) else { return }
+        guard let snapshot = currentSnapshot(from: provider) else { return }
 
         LAAppGroupSettings.setThresholds(
             lowMgdl: Storage.shared.lowLine.value,
@@ -198,7 +198,7 @@ final class LiveActivityManager {
         )
         let content = ActivityContent(
             state: state,
-            staleDate: Date(timeIntervalSince1970: Storage.shared.laRenewBy.value),
+            staleDate: contentDeadline(snapshot),
             relevanceScore: 100.0,
         )
 
@@ -207,7 +207,7 @@ final class LiveActivityManager {
             await activity.update(content)
             LogManager.shared.log(category: .general, message: "[LA] resign-active flush sent seq=\(nextSeq)", isDebug: true)
             // Also send APNs so the extension receives the latest token-based update.
-            if let token = pushToken {
+            if snapshot.nearbyExpiresAt == nil, let token = pushToken {
                 await APNSClient.shared.sendLiveActivityUpdate(pushToken: token, state: state)
             }
         }
@@ -378,7 +378,7 @@ final class LiveActivityManager {
         }
 
         let now = Date().timeIntervalSince1970
-        let staleDatePassed = activity.content.staleDate.map { $0 <= Date() } ?? false
+        let staleDatePassed = activity.content.state.snapshot.nearbyExpiresAt == nil && (activity.content.staleDate.map { $0 <= Date() } ?? false)
         if staleDatePassed {
             LogManager.shared.log(
                 category: .general,
@@ -502,7 +502,7 @@ final class LiveActivityManager {
         if let existing = Activity<GlucoseLiveActivityAttributes>.activities.first {
             let renewBy = Storage.shared.laRenewBy.value
             let now = Date().timeIntervalSince1970
-            let staleDatePassed = existing.content.staleDate.map { $0 <= Date() } ?? false
+            let staleDatePassed = existing.content.state.snapshot.nearbyExpiresAt == nil && (existing.content.staleDate.map { $0 <= Date() } ?? false)
             let inRenewalWindow = renewBy > 0 && now >= renewBy - LiveActivityManager.renewalWarning
             let needsRestart = Storage.shared.laRenewalFailed.value || inRenewalWindow || staleDatePassed
             if !needsRestart {
@@ -623,7 +623,7 @@ final class LiveActivityManager {
         }
 
         let provider = StorageCurrentGlucoseStateProvider()
-        if let snapshot = GlucoseSnapshotBuilder.build(from: provider) {
+        if let snapshot = currentSnapshot(from: provider) {
             LAAppGroupSettings.setThresholds(
                 lowMgdl: Storage.shared.lowLine.value,
                 highMgdl: Storage.shared.highLine.value,
@@ -635,6 +635,27 @@ final class LiveActivityManager {
             GlucoseSnapshotStore.shared.save(snapshot)
         }
         startIfNeeded()
+    }
+
+    private func currentSnapshot(from provider: StorageCurrentGlucoseStateProvider) -> GlucoseSnapshot? {
+        NearbyLiveActivitySnapshot.select(
+            cloud: GlucoseSnapshotBuilder.build(from: provider),
+            packet: NearbyReceiver.shared.packet, enabled: NearbyReceiver.shared.enabled,
+            unit: PreferredGlucoseUnit.snapshotUnit(), now: Date()
+        )
+    }
+
+    /// Called while Core Bluetooth has granted execution time; do not debounce it away.
+    func refreshFromNearbyBluetooth() {
+        refreshWorkItem?.cancel()
+        refreshWorkItem = nil
+        performRefresh(reason: "nearby-bluetooth")
+    }
+
+    private func contentDeadline(_ snapshot: GlucoseSnapshot) -> Date {
+        let renewal = Date(timeIntervalSince1970: Storage.shared.laRenewBy.value)
+        guard let expiry = snapshot.nearbyExpiresAt else { return renewal }
+        return min(renewal, Date(timeIntervalSince1970: expiry))
     }
 
     func refreshFromCurrentState(reason: String) {
@@ -725,7 +746,7 @@ final class LiveActivityManager {
         let workingSnapshot: GlucoseSnapshot = {
             if let snapshot { return snapshot }
             let provider = StorageCurrentGlucoseStateProvider()
-            return GlucoseSnapshotBuilder.build(from: provider)
+            return currentSnapshot(from: provider)
                 ?? GlucoseSnapshotStore.shared.load()
                 ?? GlucoseSnapshot(
                     glucose: 0,
@@ -759,7 +780,7 @@ final class LiveActivityManager {
         snapshot: GlucoseSnapshot?
     ) -> Bool {
         let provider = StorageCurrentGlucoseStateProvider()
-        guard let snapshot = snapshot ?? GlucoseSnapshotBuilder.build(from: provider)
+        guard let snapshot = snapshot ?? currentSnapshot(from: provider)
             ?? GlucoseSnapshotStore.shared.load()
         else {
             LogManager.shared.log(category: .general, message: "[LA] foreground start deferred — no glucose snapshot")
@@ -777,7 +798,7 @@ final class LiveActivityManager {
         do {
             let activity = try Activity<GlucoseLiveActivityAttributes>.request(
                 attributes: GlucoseLiveActivityAttributes(title: "LoopFollow"),
-                content: ActivityContent(state: state, staleDate: deadline, relevanceScore: 100),
+                content: ActivityContent(state: state, staleDate: freshSnapshot.nearbyExpiresAt.map { min(deadline, Date(timeIntervalSince1970: $0)) } ?? deadline, relevanceScore: 100),
                 pushType: .token,
             )
             seq = nextSeq
@@ -863,7 +884,8 @@ final class LiveActivityManager {
             reason: reason,
             producedAt: Date(),
         )
-        let staleDate = Date().addingTimeInterval(LiveActivityManager.renewalThreshold)
+        let renewalDeadline = Date().addingTimeInterval(LiveActivityManager.renewalThreshold)
+        let staleDate = freshSnapshot.nearbyExpiresAt.map { min(renewalDeadline, Date(timeIntervalSince1970: $0)) } ?? renewalDeadline
 
         let tail = String(token.suffix(8))
         LogManager.shared.log(
@@ -968,7 +990,7 @@ final class LiveActivityManager {
 
     private func performRefresh(reason: String) {
         let provider = StorageCurrentGlucoseStateProvider()
-        guard let snapshot = GlucoseSnapshotBuilder.build(from: provider) else {
+        guard let snapshot = currentSnapshot(from: provider) else {
             return
         }
         LogManager.shared.log(category: .general, message: "[LA] refresh g=\(snapshot.glucose) reason=\(reason)", isDebug: true)
@@ -1014,7 +1036,7 @@ final class LiveActivityManager {
             return
         }
         if current == nil,
-           let existing = Activity<GlucoseLiveActivityAttributes>.activities.first(where: { $0.activityState == .active })
+           let existing = Activity<GlucoseLiveActivityAttributes>.activities.first(where: { $0.activityState == .active || $0.activityState == .stale })
         {
             // Skip activities already in .ended/.dismissed — those are corpses
             // (typically post-410 ends pending iOS dismissal). Binding to them
@@ -1045,7 +1067,7 @@ final class LiveActivityManager {
 
     func update(snapshot: GlucoseSnapshot, reason: String) {
         if current == nil,
-           let existing = Activity<GlucoseLiveActivityAttributes>.activities.first(where: { $0.activityState == .active })
+           let existing = Activity<GlucoseLiveActivityAttributes>.activities.first(where: { $0.activityState == .active || $0.activityState == .stale })
         {
             bind(to: existing, logReason: "bind-existing")
         }
@@ -1075,23 +1097,20 @@ final class LiveActivityManager {
 
             let content = ActivityContent(
                 state: state,
-                staleDate: Date(timeIntervalSince1970: Storage.shared.laRenewBy.value),
+                staleDate: contentDeadline(snapshot),
                 relevanceScore: 100.0,
             )
 
             if Task.isCancelled { return }
 
-            // Dual-path update strategy:
-            // - Foreground: direct ActivityKit update works reliably.
-            // - Background: direct update silently fails due to the audio session
-            //   limitation. APNs self-push is the only reliable delivery path.
-            //   Both paths are attempted when applicable; APNs is the authoritative
-            //   background mechanism.
+            // Bluetooth callbacks grant background execution time. Use ActivityKit
+            // directly during that window; nearby updates never require APNs.
+            // Preserve the existing internet update path for cloud snapshots.
             let isForeground = await MainActor.run {
                 UIApplication.shared.applicationState == .active
             }
 
-            if isForeground {
+            if isForeground || snapshot.nearbyExpiresAt != nil {
                 await activity.update(content)
             } else {
                 LogManager.shared.log(
@@ -1111,7 +1130,7 @@ final class LiveActivityManager {
             lastUpdateTime = Date()
             LogManager.shared.log(category: .general, message: "[LA] updated id=\(activityID) seq=\(nextSeq) reason=\(reason)", isDebug: true)
 
-            if let token = pushToken {
+            if snapshot.nearbyExpiresAt == nil, let token = pushToken {
                 await APNSClient.shared.sendLiveActivityUpdate(pushToken: token, state: state)
             } else {
                 LogManager.shared.log(

@@ -240,6 +240,7 @@ class APNSClient {
             "unit": snapshot.unit.rawValue,
         ]
 
+        if let expiry = snapshot.nearbyExpiresAt { snapshotDict["nearbyExpiresAt"] = expiry }
         snapshotDict["isNotLooping"] = snapshot.isNotLooping
         snapshotDict["showRenewalOverlay"] = snapshot.showRenewalOverlay
         if let iob = snapshot.iob { snapshotDict["iob"] = iob }

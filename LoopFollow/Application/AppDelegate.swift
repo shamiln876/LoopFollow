@@ -15,6 +15,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 return true // Synthetic UI checks never start networking, alarms or telemetry.
             }
         #endif
+        _ = NearbyReceiver.shared
         LogManager.shared.log(category: .general, message: "App started")
         LogManager.shared.cleanupOldLogs()
 
