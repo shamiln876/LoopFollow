@@ -7,7 +7,7 @@ Trio publishes encrypted local readings directly to LoopFollow using Core Blueto
 1. In Trio: Settings → Services → Nearby Bluetooth. Enable sharing and show the private QR code.
 2. In LoopFollow: Menu → Nearby Bluetooth → Scan Trio pairing code. Allow Bluetooth and camera access.
 3. Remain nearby and compare the displayed glucose, glucose timestamp, IOB and COB with Trio. IOB and COB retain their independent source timestamps.
-4. View offline readings on the Nearby Bluetooth screen. Home, Live Activity, alarms and remote controls still use their existing data sources. This preview does not support remote treatment commands.
+4. View offline readings on the Nearby Bluetooth screen. Live Activity selects the newest Bluetooth or internet glucose reading and receives direct ActivityKit updates on Bluetooth reception. Home, alarms and remote controls still use their existing data sources. This preview does not support remote treatment commands.
 
 ## Required two-phone acceptance test
 
@@ -28,3 +28,9 @@ Private random service UUID; AES-GCM authenticated encryption; QR exchanges the 
 The sender uses read/notify-only GATT characteristics, a one-byte change notice, ATT long reads capped at 512 bytes, per-reader snapshots and notification backpressure handling. The receiver scans for its exact service UUID, subscribes, authenticates frames, rejects unknown protocol versions and implausible/future/expired data, and discards older transfers. Bluetooth state restoration and reconnect are implemented. Physical background scheduling remains unverified.
 
 Protocol checks cover encrypted roundtrip, original reading timestamp preservation, negative IOB, wrong key, tampering, expiry, clock skew, replay/order, oversize, invalid pairing and missing metric timestamps. Simulator compilation cannot test a real Bluetooth radio connection.
+
+## Bluetooth Live Activity
+
+LoopFollow build 31 adds direct Live Activity updates using the existing Trio build 12 packet. Open LoopFollow once after updating to start or refresh the activity. The card labels Bluetooth data, preserves original timestamps, omits unavailable cloud therapy fields, and becomes stale after six minutes (earlier if an included IOB/COB timestamp is older). Newer cloud readings take priority; Bluetooth wins equal timestamps. Background creation/renewal may still require opening LoopFollow when offline. Actual locked-device delivery needs a two-phone test.
+
+For that test, turn off internet on both phones with Bluetooth on; keep both apps running, lock them, and check for at least two newer readings on the lock-screen Live Activity without foregrounding LoopFollow. A reading that appears only after opening the app does not verify background delivery.

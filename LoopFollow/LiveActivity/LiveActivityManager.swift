@@ -884,7 +884,8 @@ final class LiveActivityManager {
             reason: reason,
             producedAt: Date(),
         )
-        let staleDate = Date().addingTimeInterval(LiveActivityManager.renewalThreshold)
+        let renewalDeadline = Date().addingTimeInterval(LiveActivityManager.renewalThreshold)
+        let staleDate = freshSnapshot.nearbyExpiresAt.map { min(renewalDeadline, Date(timeIntervalSince1970: $0)) } ?? renewalDeadline
 
         let tail = String(token.suffix(8))
         LogManager.shared.log(
