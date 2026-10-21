@@ -51,7 +51,7 @@
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>This app uses Bluetooth to connect to devices for managing background operations.</string>
+	<string>Bluetooth supports background refresh and private nearby sharing from Trio.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Loop Follow would like to access your calendar to update BG readings</string>
 	<key>NSCalendarsUsageDescription</key>
