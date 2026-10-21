@@ -134,6 +134,9 @@ struct GlucoseSnapshot: Codable, Equatable, Hashable {
     /// The extension renders a "Tap to update" overlay so the user knows renewal is imminent.
     let showRenewalOverlay: Bool
 
+    /// Bluetooth data expires independently of the activity renewal deadline.
+    let nearbyExpiresAt: Double?
+
     // MARK: - Init
 
     init(
@@ -169,7 +172,9 @@ struct GlucoseSnapshot: Codable, Equatable, Hashable {
         unit: Unit,
         isNotLooping: Bool,
         showRenewalOverlay: Bool = false,
+        nearbyExpiresAt: Double? = nil,
     ) {
+        self.nearbyExpiresAt = nearbyExpiresAt
         self.glucose = glucose
         self.delta = delta
         self.trend = trend
@@ -248,6 +253,7 @@ struct GlucoseSnapshot: Codable, Equatable, Hashable {
             unit: unit,
             isNotLooping: isNotLooping,
             showRenewalOverlay: value,
+            nearbyExpiresAt: nearbyExpiresAt,
         )
     }
 
@@ -255,6 +261,7 @@ struct GlucoseSnapshot: Codable, Equatable, Hashable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(nearbyExpiresAt, forKey: .nearbyExpiresAt)
         try container.encode(glucose, forKey: .glucose)
         try container.encode(delta, forKey: .delta)
         try container.encode(trend, forKey: .trend)
@@ -291,6 +298,7 @@ struct GlucoseSnapshot: Codable, Equatable, Hashable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        nearbyExpiresAt = try container.decodeIfPresent(Double.self, forKey: .nearbyExpiresAt)
         glucose = try container.decode(Double.self, forKey: .glucose)
         delta = try container.decode(Double.self, forKey: .delta)
         trend = try container.decode(Trend.self, forKey: .trend)
@@ -326,7 +334,7 @@ struct GlucoseSnapshot: Codable, Equatable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case glucose, delta, trend, updatedAt
+        case glucose, delta, trend, updatedAt, nearbyExpiresAt
         case iob, cob, projected
         case override, overrideEndAt, tempTargetMgdl, tempTargetEndAt
         case recBolus, battery, pumpBattery, basalRate, pumpReservoirU

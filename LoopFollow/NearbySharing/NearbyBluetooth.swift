@@ -314,6 +314,9 @@ final class NearbyBluetooth: NSObject, ObservableObject, CBCentralManagerDelegat
             packet = value
             receivedAt = Date()
             status = "Receiving directly over Bluetooth"
+            #if !targetEnvironment(macCatalyst)
+                LiveActivityManager.shared.refreshFromNearbyBluetooth()
+            #endif
         } catch { status = "Rejected invalid, expired or unauthenticated data" }
     }
 

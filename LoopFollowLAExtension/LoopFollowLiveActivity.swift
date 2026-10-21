@@ -11,6 +11,7 @@ private func makeDynamicIsland(context: ActivityViewContext<GlucoseLiveActivityA
         DynamicIslandExpandedRegion(.leading) {
             Link(destination: URL(string: "\(AppGroupID.urlScheme)://la-tap")!) {
                 DynamicIslandLeadingView(snapshot: context.state.snapshot)
+                    .opacity(context.isStale && context.state.snapshot.nearbyExpiresAt != nil ? 0.35 : 1)
                     .overlay(RenewalOverlayView(show: context.state.snapshot.showRenewalOverlay))
             }
             .id(context.state.seq)
@@ -25,6 +26,7 @@ private func makeDynamicIsland(context: ActivityViewContext<GlucoseLiveActivityA
         DynamicIslandExpandedRegion(.bottom) {
             Link(destination: URL(string: "\(AppGroupID.urlScheme)://la-tap")!) {
                 DynamicIslandBottomView(snapshot: context.state.snapshot)
+                    .overlay(alignment: .top) { if context.isStale && context.state.snapshot.nearbyExpiresAt != nil { Text("STALE Bluetooth data").foregroundStyle(.orange) } }
                     .overlay(RenewalOverlayView(show: context.state.snapshot.showRenewalOverlay, showText: true))
             }
             .id(context.state.seq)
@@ -33,11 +35,19 @@ private func makeDynamicIsland(context: ActivityViewContext<GlucoseLiveActivityA
         DynamicIslandCompactLeadingView(snapshot: context.state.snapshot)
             .id(context.state.seq)
     } compactTrailing: {
-        DynamicIslandCompactTrailingView(snapshot: context.state.snapshot)
-            .id(context.state.seq)
+        if context.isStale && context.state.snapshot.nearbyExpiresAt != nil {
+            Text("OLD").foregroundStyle(.orange)
+        } else {
+            DynamicIslandCompactTrailingView(snapshot: context.state.snapshot)
+                .id(context.state.seq)
+        }
     } minimal: {
-        DynamicIslandMinimalView(snapshot: context.state.snapshot)
-            .id(context.state.seq)
+        if context.isStale && context.state.snapshot.nearbyExpiresAt != nil {
+            Text("OLD").foregroundStyle(.orange)
+        } else {
+            DynamicIslandMinimalView(snapshot: context.state.snapshot)
+                .id(context.state.seq)
+        }
     }
     .keylineTint(LAColors.keyline(for: context.state.snapshot).opacity(0.75))
 }
@@ -50,7 +60,14 @@ private func makeDynamicIsland(context: ActivityViewContext<GlucoseLiveActivityA
 struct LoopFollowLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: GlucoseLiveActivityAttributes.self) { context in
-            LockScreenFamilyAdaptiveView(state: context.state)
+            VStack(spacing: 4) {
+                if context.state.snapshot.nearbyExpiresAt != nil {
+                    Text(context.isStale ? "STALE Bluetooth data — open LoopFollow" : "Bluetooth · Trio")
+                        .font(.caption.bold()).foregroundStyle(context.isStale ? .orange : .secondary)
+                }
+                LockScreenFamilyAdaptiveView(state: context.state)
+                    .opacity(context.isStale && context.state.snapshot.nearbyExpiresAt != nil ? 0.35 : 1)
+            }
                 .id(context.state.seq)
                 .background(
                     LALivenessMarker(

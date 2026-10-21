@@ -65,7 +65,7 @@ struct NearbySharingView: View {
                 }
             }
             Section {
-                Text("These values are read-only and appear on this screen. Home, Live Activity, alarms and remote controls still use their existing internet data source.")
+                Text("These values are read-only and appear on this screen. Live Activity also uses these readings when they are the newest. Home, alarms and remote controls still use their existing internet data source.")
                 if !link.pairingCode.isEmpty {
                     Button("Remove pairing", role: .destructive) { link.forget(); showCode = false }
                 }
