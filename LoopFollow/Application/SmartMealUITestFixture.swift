@@ -2,6 +2,7 @@
 // SmartMealUITestFixture.swift
 
 #if DEBUG && targetEnvironment(simulator)
+    import ActivityKit
     import HealthKit
     import SwiftUI
 
@@ -10,6 +11,7 @@
     struct SmartMealUITestFixture: View {
         static var enabled: Bool { ProcessInfo.processInfo.arguments.contains("--smart-meal-ui-test") }
         private static var configured = false
+        @State private var liveActivityResult = "Not started"
         @State private var route: FixtureRoute?
         @State private var percentageDraft: SmartMealDraft?
 
@@ -75,9 +77,37 @@
             }
         }
 
+        @MainActor private func checkForegroundLiveActivity() {
+            Storage.shared.laEnabled.value = true
+            Storage.shared.lfKeyId.value = ""
+            Storage.shared.lfApnsKey.value = ""
+            Storage.shared.laLastPushToStartAt.value = Date().timeIntervalSince1970
+            Storage.shared.laPushToStartBackoff.value = 3600
+            let readingDate = Date().addingTimeInterval(-600)
+            let snapshot = GlucoseSnapshot(glucose: 123, delta: 0, trend: .unknown,
+                                           updatedAt: readingDate, iob: nil, cob: nil, projected: nil,
+                                           unit: .mgdl, isNotLooping: false)
+            GlucoseSnapshotStore.shared.save(snapshot)
+            let manager = LiveActivityManager.shared
+            manager.startIfNeeded()
+            guard let first = manager.current else {
+                liveActivityResult = "Failed to create activity"
+                return
+            }
+            manager.startIfNeeded()
+            let preserved = first.content.state.snapshot.updatedAt == readingDate
+            let reused = manager.current?.id == first.id
+            liveActivityResult = preserved && reused ? "Created; timestamp preserved; reused" : "State mismatch"
+        }
+
         var body: some View {
             VStack(spacing: 24) {
                 Text("Synthetic meal workflow test").font(.caption)
+                if ProcessInfo.processInfo.arguments.contains("--live-activity-ui-test") {
+                    Button("Start Live Activity") { checkForegroundLiveActivity() }
+                        .accessibilityIdentifier("fixture-start-live-activity")
+                    Text(liveActivityResult).accessibilityIdentifier("fixture-live-activity-result")
+                }
                 MealDashboardHomeCard()
                 if ProcessInfo.processInfo.arguments.contains("--smart-meal-percentage-test") {
                     Button("Review synthetic 80 g meal") { route = .percentageAdvisor }

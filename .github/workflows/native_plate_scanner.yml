@@ -56,6 +56,7 @@ jobs:
             -configuration Debug -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
             -derivedDataPath "$RUNNER_TEMP/plate-native-build" \
             -resultBundlePath "$RUNNER_TEMP/plate-native.xcresult" \
+            -only-testing:SmartMealUITests/SmartMealHandoffUITests/testLiveActivityStartsWithoutAPNsDespiteBackoff \
             -only-testing:SmartMealUITests/SmartMealHandoffUITests/testOptionalScannerRequiresReviewAndUnknownResolution \
             -only-testing:SmartMealUITests/SmartMealHandoffUITests/testDirectPhotoCancellationKeepsAdvisorCarbs \
             -only-testing:SmartMealUITests/CarnivalManualUITests/testManualHalfBagelStillFillsAdvisorAfterCancellingScanner \

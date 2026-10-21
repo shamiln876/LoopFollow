@@ -6,6 +6,17 @@ import XCTest
 final class SmartMealHandoffUITests: XCTestCase {
     override func setUp() { super.setUp(); continueAfterFailure = false }
 
+    func testLiveActivityStartsWithoutAPNsDespiteBackoff() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--smart-meal-ui-test", "--live-activity-ui-test"]
+        app.launch()
+        let start = app.buttons["fixture-start-live-activity"]
+        XCTAssertTrue(start.waitForExistence(timeout: 30)); start.tap()
+        let result = app.staticTexts["Created; timestamp preserved; reused"]
+        XCTAssertTrue(result.waitForExistence(timeout: 10))
+        app.terminate()
+    }
+
     func testPostMealSMBToggleShowsControllerStateAndHoldsUnsupportedTrio() {
         for mode in ["on", "off", "unsupported"] {
             let app = XCUIApplication()
