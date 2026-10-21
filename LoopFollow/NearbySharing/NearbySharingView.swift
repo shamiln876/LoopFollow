@@ -1,5 +1,8 @@
-import SwiftUI
+// LoopFollow
+// NearbySharingView.swift
+
 import CoreImage.CIFilterBuiltins
+import SwiftUI
 
 struct NearbySharingView: View {
     @ObservedObject var link: NearbyBluetooth

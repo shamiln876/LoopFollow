@@ -1,3 +1,6 @@
+// LoopFollow
+// NearbyReceiver.swift
+
 import SwiftUI
 
 enum NearbyReceiver {

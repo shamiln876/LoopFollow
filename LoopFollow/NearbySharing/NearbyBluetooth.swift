@@ -1,7 +1,10 @@
-import Foundation
+// LoopFollow
+// NearbyBluetooth.swift
+
 import Combine
 import CoreBluetooth
 import CryptoKit
+import Foundation
 import Security
 
 /// All Bluetooth callbacks and observable state are confined to the main queue.
@@ -93,13 +96,13 @@ final class NearbyBluetooth: NSObject, ObservableObject, CBCentralManagerDelegat
         if sender {
             if peripheralManager == nil {
                 peripheralManager = CBPeripheralManager(delegate: self, queue: .main, options: [
-                    CBPeripheralManagerOptionRestoreIdentifierKey: "trio.nearby.sender.v1"
+                    CBPeripheralManagerOptionRestoreIdentifierKey: "trio.nearby.sender.v1",
                 ])
             } else if peripheralManager?.state == .poweredOn { advertise() }
         } else {
             if central == nil {
                 central = CBCentralManager(delegate: self, queue: .main, options: [
-                    CBCentralManagerOptionRestoreIdentifierKey: "loopfollow.nearby.receiver.v1"
+                    CBCentralManagerOptionRestoreIdentifierKey: "loopfollow.nearby.receiver.v1",
                 ])
             } else if central?.state == .poweredOn { scan() }
         }
@@ -158,7 +161,7 @@ final class NearbyBluetooth: NSObject, ObservableObject, CBCentralManagerDelegat
         advertise()
     }
 
-    func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: Error?) {
+    func peripheralManagerDidStartAdvertising(_: CBPeripheralManager, error: Error?) {
         if error != nil { status = "Bluetooth advertising failed — reopen Nearby Sharing" }
     }
 
@@ -174,17 +177,17 @@ final class NearbyBluetooth: NSObject, ObservableObject, CBCentralManagerDelegat
         guard let bytes = readSnapshots[request.central.identifier], request.offset <= bytes.count else {
             peripheral.respond(to: request, withResult: .invalidOffset); return
         }
-        request.value = bytes.subdata(in: request.offset..<bytes.count)
+        request.value = bytes.subdata(in: request.offset ..< bytes.count)
         peripheral.respond(to: request, withResult: .success)
     }
 
-    func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
+    func peripheralManager(_: CBPeripheralManager, central _: CBCentral, didSubscribeTo _: CBCharacteristic) {
         guard enabled else { return }
         status = "Bluetooth subscriber connected"
         notify()
     }
 
-    func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
+    func peripheralManager(_: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom _: CBCharacteristic) {
         readSnapshots.removeValue(forKey: central.identifier)
         status = "Sharing nearby — waiting for LoopFollow"
     }
@@ -195,7 +198,7 @@ final class NearbyBluetooth: NSObject, ObservableObject, CBCentralManagerDelegat
         pendingNotice = !manager.updateValue(Data([1]), for: characteristic, onSubscribedCentrals: nil)
     }
 
-    func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
+    func peripheralManagerIsReady(toUpdateSubscribers _: CBPeripheralManager) {
         if pendingNotice { notify() }
     }
 
@@ -216,15 +219,14 @@ final class NearbyBluetooth: NSObject, ObservableObject, CBCentralManagerDelegat
     private func scan() {
         guard enabled, let pairing, let central, central.state == .poweredOn else { return }
         if let peer {
-            if peer.state == .connected { discover(peer) }
-            else { central.connect(peer, options: nil) }
+            if peer.state == .connected { discover(peer) } else { central.connect(peer, options: nil) }
             return
         }
         status = "Searching for paired Trio phone"
         central.scanForPeripherals(withServices: [CBUUID(nsuuid: pairing.service)], options: nil)
     }
 
-    func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
+    func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData _: [String: Any], rssi _: NSNumber) {
         guard enabled, peer == nil else { return }
         peer = peripheral
         peripheral.delegate = self
@@ -246,13 +248,13 @@ final class NearbyBluetooth: NSObject, ObservableObject, CBCentralManagerDelegat
         peripheral.discoverServices([CBUUID(nsuuid: pairing.service)])
     }
 
-    func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+    func centralManager(_: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error _: Error?) {
         guard peer?.identifier == peripheral.identifier else { return }
         peer = nil; remoteCharacteristic = nil; readInFlight = false
         if enabled { scan() }
     }
 
-    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error _: Error?) {
         guard peer?.identifier == peripheral.identifier else { return }
         remoteCharacteristic = nil; readInFlight = false; readAgain = false
         guard enabled else { return }
@@ -271,7 +273,8 @@ final class NearbyBluetooth: NSObject, ObservableObject, CBCentralManagerDelegat
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard error == nil, let pairing,
-              let service = peripheral.services?.first(where: { $0.uuid == CBUUID(nsuuid: pairing.service) }) else {
+              let service = peripheral.services?.first(where: { $0.uuid == CBUUID(nsuuid: pairing.service) })
+        else {
             status = "Could not find paired sharing service"; return
         }
         peripheral.discoverCharacteristics([characteristicID], for: service)
@@ -293,7 +296,7 @@ final class NearbyBluetooth: NSObject, ObservableObject, CBCentralManagerDelegat
         peer.readValue(for: remoteCharacteristic)
     }
 
-    func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+    func peripheral(_: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
         if error != nil || !characteristic.isNotifying { status = "Bluetooth subscription failed" }
     }
 
@@ -329,8 +332,10 @@ final class NearbyBluetooth: NSObject, ObservableObject, CBCentralManagerDelegat
     }
 
     private func savePairing(_ value: NearbyPairing) throws {
-        let attributes: [String: Any] = [kSecValueData as String: try JSONEncoder().encode(value),
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+        let attributes: [String: Any] = try [
+            kSecValueData as String: JSONEncoder().encode(value),
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
         let result = SecItemUpdate(keychainQuery() as CFDictionary, attributes as CFDictionary)
         if result == errSecItemNotFound {
             let query = keychainQuery().merging(attributes) { _, new in new }

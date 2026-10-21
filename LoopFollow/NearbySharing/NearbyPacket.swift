@@ -1,5 +1,8 @@
-import Foundation
+// LoopFollow
+// NearbyPacket.swift
+
 import CryptoKit
+import Foundation
 
 /// Display-only wire format. No command, dosing or settings fields are accepted.
 struct NearbyPacket: Codable, Equatable {
@@ -19,7 +22,7 @@ struct NearbyPacket: Codable, Equatable {
               generatedAt <= now + 60, glucoseDate <= generatedAt + 60,
               now - generatedAt <= 15 * 60,
               previous.map({ generatedAt > $0 }) ?? true,
-              (20...600).contains(glucoseMgdl),
+              (20 ... 600).contains(glucoseMgdl),
               deltaMgdl.map({ abs(Double($0)) <= 600 }) ?? true,
               validMetric(iob, date: iobDate, lower: -1000, limit: 1000),
               validMetric(cob, date: cobDate, lower: 0, limit: 10000)

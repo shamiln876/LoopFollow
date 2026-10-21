@@ -1,11 +1,16 @@
-import Foundation
-import CryptoKit
+// LoopFollow
+// main.swift
 
-let now = 1800000000.0
+import CryptoKit
+import Foundation
+
+let now = 1_800_000_000.0
 let key = Data(repeating: 7, count: 32)
+
 func rejects(_ name: String, _ body: () throws -> Void) {
     do { try body(); fatalError("Accepted invalid case: " + name) } catch { print("PASS " + name) }
 }
+
 let packet = NearbyPacket(generatedAt: now, glucoseDate: now - 600, glucoseMgdl: 123, deltaMgdl: -5,
                           iob: -0.2, iobDate: now - 20, cob: 14, cobDate: now - 60)
 let bytes = try packet.sealed(key: key)
