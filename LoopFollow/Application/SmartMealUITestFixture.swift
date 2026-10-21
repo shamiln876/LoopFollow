@@ -83,11 +83,9 @@
             Storage.shared.lfApnsKey.value = ""
             Storage.shared.laLastPushToStartAt.value = Date().timeIntervalSince1970
             Storage.shared.laPushToStartBackoff.value = 3600
-            let readingDate = Date().addingTimeInterval(-600)
-            let snapshot = GlucoseSnapshot(glucose: 123, delta: 0, trend: .unknown,
-                                           updatedAt: readingDate, iob: nil, cob: nil, projected: nil,
-                                           unit: .mgdl, isNotLooping: false)
-            GlucoseSnapshotStore.shared.save(snapshot)
+            let readingDate = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970) - 600)
+            Observable.shared.bg.value = 123
+            Storage.shared.lastBgReadingTimeSeconds.value = readingDate.timeIntervalSince1970
             let manager = LiveActivityManager.shared
             manager.startIfNeeded()
             guard let first = manager.current else {
