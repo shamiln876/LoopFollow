@@ -63,7 +63,8 @@ jobs:
             -only-testing:SmartMealUITests/SmartMealHandoffUITests/testLowForecastRequiresAcceptAndPreservesEditedDose \
             -only-testing:SmartMealUITests/SmartMealHandoffUITests/testManualMealRemainsAvailableDuringVeryLowForecast \
             'SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG PLATE_SCAN_REQUIRE_NATIVE' \
-            CODE_SIGNING_ALLOWED=NO test | tee "$RUNNER_TEMP/plate-native-build.log"
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM= unique_id=uitest test | tee "$RUNNER_TEMP/plate-native-build.log"
       - name: Save build and synthetic UI evidence
         if: always()
         uses: actions/upload-artifact@v4
