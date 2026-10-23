@@ -241,21 +241,19 @@ struct MealView: View {
                             }
                         )
 
-                        // Always show insulin beside carbs in the simple meal workflow.
-                        if true {
-                            HKQuantityInputView(
-                                label: "Bolus Amount",
-                                quantity: $bolusAmount,
-                                unit: .internationalUnit(),
-                                maxLength: 4,
-                                minValue: HKQuantity(unit: .internationalUnit(), doubleValue: 0),
-                                maxValue: maxBolus.value,
-                                isFocused: $bolusFieldIsFocused,
-                                onValidationError: { message in
-                                    handleValidationError(message)
-                                }
-                            )
-                        }
+                        // Always display both entry fields, regardless of Advanced settings.
+                        HKQuantityInputView(
+                            label: "Bolus Amount",
+                            quantity: $bolusAmount,
+                            unit: .internationalUnit(),
+                            maxLength: 4,
+                            minValue: HKQuantity(unit: .internationalUnit(), doubleValue: 0),
+                            maxValue: maxBolus.value,
+                            isFocused: $bolusFieldIsFocused,
+                            onValidationError: { message in
+                                handleValidationError(message)
+                            }
+                        )
                         Button(showAdvancedMealOptions ? "Hide extra options" : "More options") {
                             showAdvancedMealOptions.toggle()
                         }
@@ -603,6 +601,7 @@ struct MealView: View {
                     carbs = HKQuantity(unit: .gram(), doubleValue: 0.0)
                     protein = HKQuantity(unit: .gram(), doubleValue: 0.0)
                     fat = HKQuantity(unit: .gram(), doubleValue: 0.0)
+                    bolusAmount = HKQuantity(unit: .internationalUnit(), doubleValue: 0.0)
                     selectedTime = nil
                     isScheduling = false
                     alertType = .statusSuccess
