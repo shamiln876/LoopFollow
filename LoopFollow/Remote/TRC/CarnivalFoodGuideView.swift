@@ -73,7 +73,7 @@ struct CarnivalFoodGuideView: View {
                         Button(category.rawValue) { quickCategory = category }
                             .buttonStyle(.bordered)
                             .tint(quickCategory == category ? .accentColor : .secondary)
-                            .accessibilityIdentifier("quick-food-category-\\(category.id)")
+                            .accessibilityIdentifier("quick-food-category-\(category.id)")
                     }
                 }
                 .padding(.vertical, 3)
@@ -92,7 +92,7 @@ struct CarnivalFoodGuideView: View {
                         Text(CarnivalQuickPortion.stepLabel(for: food))
                             .font(.caption).foregroundStyle(.secondary)
                         if let amount = food.carbs {
-                            Text("~\\(CarnivalNumber.text(amount * CarnivalQuickPortion.step(for: food))) g per tap")
+                            Text("~\(CarnivalNumber.text(amount * CarnivalQuickPortion.step(for: food))) g per tap")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -103,7 +103,7 @@ struct CarnivalFoodGuideView: View {
                         Image(systemName: "plus.circle.fill").font(.title2)
                     }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("Add \\(CarnivalQuickPortion.stepLabel(for: food)) of \\(food.name)")
+                    .accessibilityLabel("Add \(CarnivalQuickPortion.stepLabel(for: food)) of \(food.name)")
                 }
             }
         }
@@ -119,7 +119,7 @@ struct CarnivalFoodGuideView: View {
                     }
                     Spacer()
                     if let carbs = item.food.carbs {
-                        Text("~\\(CarnivalNumber.text(carbs * item.portions)) g")
+                        Text("~\(CarnivalNumber.text(carbs * item.portions)) g")
                             .font(.subheadline).monospacedDigit()
                     }
                     Button {
@@ -128,18 +128,18 @@ struct CarnivalFoodGuideView: View {
                         Image(systemName: "minus.circle").font(.title3)
                     }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("Remove one portion step of \\(item.food.name)")
+                    .accessibilityLabel("Remove one portion step of \(item.food.name)")
                 }
             }
             if let total = meal.carbsForReview {
                 HStack {
                     Text("Estimated carbs").font(.headline)
                     Spacer()
-                    Text("\\(CarnivalNumber.text(total)) g").font(.title3.weight(.semibold)).monospacedDigit()
+                    Text("\(CarnivalNumber.text(total)) g").font(.title3.weight(.semibold)).monospacedDigit()
                 }
                 Text("Approximate food-guide values, not a verified insulin dose. Your insulin entry stays separate.")
                     .font(.caption).foregroundStyle(.secondary)
-                Button("Use \\(CarnivalNumber.text(total)) g in Meal") { use(meal); dismiss() }
+                Button("Use \(CarnivalNumber.text(total)) g in Meal") { use(meal); dismiss() }
                     .font(.headline)
                     .accessibilityIdentifier("quick-food-use-carbs")
             } else if !items.isEmpty {
@@ -391,13 +391,13 @@ private enum CarnivalQuickPortion {
     }
 
     static func stepLabel(for food: CarnivalFood) -> String {
-        cupBase(for: food) != nil ? "¼ cup" : "½ listed serving (\\(food.portion))"
+        cupBase(for: food) != nil ? "¼ cup" : "½ listed serving (\(food.portion))"
     }
 
     static func amountLabel(for item: CarnivalMeal.Item) -> String {
         if let cups = cupBase(for: item.food) {
-            return "\\(CarnivalNumber.text(item.portions * cups)) cup"
+            return "\(CarnivalNumber.text(item.portions * cups)) cup"
         }
-        return "\\(CarnivalNumber.text(item.portions)) × \\(item.food.portion)"
+        return "\(CarnivalNumber.text(item.portions)) × \(item.food.portion)"
     }
 }
