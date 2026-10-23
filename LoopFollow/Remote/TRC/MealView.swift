@@ -8,6 +8,7 @@ import SwiftUI
 struct MealView: View {
     @Environment(\.presentationMode) private var presentationMode
     @State private var showMealReview = false
+    @State private var showQuickPlate = false
     @State private var showAdvancedMealOptions = false
     @State private var smbSettingMessage: String?
     @State private var smbSettingSending = false
@@ -108,6 +109,12 @@ struct MealView: View {
         NavigationView {
             VStack {
                 Form {
+                    Section {
+                        Button { showQuickPlate = true } label: {
+                            Label("Build plate by food and portion", systemImage: "square.grid.2x2")
+                        }
+                        .accessibilityIdentifier("meal-build-plate")
+                    }
                     if showAdvancedMealOptions {
                     Section {
                         Button("Smart Meal Advisor") { showMealReview = true }
@@ -262,6 +269,17 @@ struct MealView: View {
                                 handleValidationError(message)
                             }
                         )
+                        if let latest = liveMealSnapshot.value,
+                           let carbRatio = latest.carbRatio,
+                           carbRatio.isFinite, carbRatio > 0,
+                           MealReviewSnapshot.fresh(latest.date, now: Date()),
+                           carbs.doubleValue(for: .gram()) > 0 {
+                            Text(String(format: "Carb-only reference: %.1f U at 1:%.1f (excludes BG correction and IOB)",
+                                        carbs.doubleValue(for: .gram()) / carbRatio, carbRatio))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("meal-carb-only-estimate")
+                        }
                         Button(showAdvancedMealOptions ? "Hide extra options" : "More options") {
                             showAdvancedMealOptions.toggle()
                         }
@@ -364,6 +382,20 @@ struct MealView: View {
                 }
                 .navigationTitle("Meal")
                 .navigationBarTitleDisplayMode(.inline)
+            }
+            .sheet(isPresented: $showQuickPlate) {
+                CarnivalFoodGuideView { meal in
+                    guard let amount = meal.carbsForReview,
+                          amount > 0, amount <= maxCarbs.value.doubleValue(for: .gram()) else { return }
+                    // A new plate replaces the prior meal entry; never preserve a stale insulin amount.
+                    advisorDraft = nil
+                    carbs = HKQuantity(unit: .gram(), doubleValue: amount)
+                    bolusAmount = HKQuantity(unit: .internationalUnit(), doubleValue: 0)
+                    protein = HKQuantity(unit: .gram(), doubleValue: 0)
+                    fat = HKQuantity(unit: .gram(), doubleValue: 0)
+                    isScheduling = false
+                    selectedTime = nil
+                }
             }
             .sheet(isPresented: $showMealReview) {
                 MealReviewView(initialCarbs: advisorDraft.map { Double($0.plan.immediateCarbs + $0.plan.delayedCarbs) } ?? carbs.doubleValue(for: .gram()), initialBolus: advisorDraft.flatMap { draft in
