@@ -240,6 +240,7 @@ class Storage {
     var snoozerPosition = StorageValue<TabPosition>(key: "snoozerPosition", defaultValue: .position3)
     var nightscoutPosition = StorageValue<TabPosition>(key: "nightscoutPosition", defaultValue: .position4)
     var remotePosition = StorageValue<TabPosition>(key: "remotePosition", defaultValue: .menu)
+    var cruisePosition = StorageValue<TabPosition>(key: "cruisePosition", defaultValue: .menu)
     var statisticsPosition = StorageValue<TabPosition>(key: "statisticsPosition", defaultValue: .menu)
     var treatmentsPosition = StorageValue<TabPosition>(key: "treatmentsPosition", defaultValue: .menu)
 
@@ -267,6 +268,7 @@ class Storage {
         case .home: homePosition.value
         case .alarms: alarmsPosition.value
         case .remote: remotePosition.value
+        case .cruise: cruisePosition.value
         case .nightscout: nightscoutPosition.value
         case .snoozer: snoozerPosition.value
         case .stats: statisticsPosition.value
@@ -280,6 +282,7 @@ class Storage {
         case .home: homePosition.value = position
         case .alarms: alarmsPosition.value = position
         case .remote: remotePosition.value = position
+        case .cruise: cruisePosition.value = position
         case .nightscout: nightscoutPosition.value = position
         case .snoozer: snoozerPosition.value = position
         case .stats: statisticsPosition.value = position

@@ -414,6 +414,7 @@ enum MenuRoute: Hashable {
     case home
     case alarms
     case remote
+    case cruise
     case nightscout
     case snoozer
     case treatments
@@ -425,6 +426,7 @@ enum MenuRoute: Hashable {
         case .home: self = .home
         case .alarms: self = .alarms
         case .remote: self = .remote
+        case .cruise: self = .cruise
         case .nightscout: self = .nightscout
         case .snoozer: self = .snoozer
         case .treatments: self = .treatments
@@ -438,6 +440,7 @@ enum MenuRoute: Hashable {
         case .home: HomeContentView(isModal: true)
         case .alarms: AlarmsContainerView(embedsInNavigationStack: false)
         case .remote: RemoteContentView()
+        case .cruise: CruiseAdvisorTabView()
         case .nightscout: NightscoutContentView()
         case .snoozer: SnoozerView()
         case .treatments: TreatmentsView()

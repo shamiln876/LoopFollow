@@ -8,6 +8,7 @@ import SwiftUI
 struct MealView: View {
     @Environment(\.presentationMode) private var presentationMode
     @State private var showMealReview = false
+    @State private var showAdvancedMealOptions = false
     @State private var smbSettingMessage: String?
     @State private var smbSettingSending = false
     @State private var pendingSMBSetting: UUID?
@@ -46,7 +47,7 @@ struct MealView: View {
     @State private var isScheduling: Bool = false
     @State private var showFatProteinOrderBanner = false
 
-    init(initialAdvisorDraft: SmartMealDraft? = nil, initialCarbs: Double = 0) {
+    init(initialAdvisorDraft: SmartMealDraft? = nil, initialCarbs: Double = 0, initialBolus: Double? = nil) {
         _advisorDraft = State(initialValue: initialAdvisorDraft)
         if let draft = initialAdvisorDraft {
             _carbs = State(initialValue: HKQuantity(unit: .gram(), doubleValue: Double(draft.plan.immediateCarbs)))
@@ -55,6 +56,10 @@ struct MealView: View {
             _bolusAmount = State(initialValue: HKQuantity(unit: .internationalUnit(), doubleValue: draft.plan.upfrontInsulin))
         } else if initialCarbs.isFinite, initialCarbs >= 0 {
             _carbs = State(initialValue: HKQuantity(unit: .gram(), doubleValue: initialCarbs))
+            if let initialBolus, initialBolus.isFinite, initialBolus >= 0 {
+                // Still editable, subject to the same on-device send/authentication checks.
+                _bolusAmount = State(initialValue: HKQuantity(unit: .internationalUnit(), doubleValue: initialBolus))
+            }
         }
     }
 
@@ -103,6 +108,7 @@ struct MealView: View {
         NavigationView {
             VStack {
                 Form {
+                    if showAdvancedMealOptions {
                     Section {
                         Button("Smart Meal Advisor") { showMealReview = true }
                             .accessibilityIdentifier("meal-open-advisor")
@@ -133,8 +139,12 @@ struct MealView: View {
                         }
                         if let smbSettingMessage { Text(smbSettingMessage).font(.footnote) }
                     }
+                    }
                     if advisorUnresolved {
-                        Section("Previous advisor send needs checking") {
+                        Section {
+                            Label("Previous meal delivery needs verification", systemImage: "exclamationmark.circle")
+                                .font(.subheadline.weight(.medium))
+                            DisclosureGroup("Review request / reconcile") {
                             if SmartMealSendJournal.shared.pendingRequest(source: Storage.shared.url.value) != nil {
                                 Text("Waiting for Trio's transaction receipt. Check actual carb entries and insulin in Trio/Nightscout. For an uncertain receiver result, acknowledge the check in Trio → Settings → Remote Control. Do not repeat this meal.")
                                 Button("I checked treatments · clear expired sender attempt") {
@@ -147,9 +157,10 @@ struct MealView: View {
                                     if SmartMealSendJournal.shared.reconcile(source: Storage.shared.url.value) { advisorUnresolved = false }
                                 }
                             }
+                            }
                         }
                     }
-                    if let receipt = advisorReceipt {
+                    if showAdvancedMealOptions, let receipt = advisorReceipt {
                         Section("Trio meal result") {
                             Text(receipt.message)
                             Text("Carbs: \(receipt.request.immediateCarbs) g now · \(receipt.request.delayedCarbs) g later. No later insulin bolus.").font(.footnote)
@@ -172,7 +183,7 @@ struct MealView: View {
                             }
                         }
                     }
-                    if !quickPickMeals.quickPickMeals.isEmpty {
+                    if showAdvancedMealOptions && !quickPickMeals.quickPickMeals.isEmpty {
                         Section(header: QuickPickSectionHeader(title: "Quick-Pick Meals", infoText: QuickPickSectionHeader.mealInfoText)) {
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 12) {
@@ -208,7 +219,7 @@ struct MealView: View {
 
                     Section(header: Text("Meal Data")) {
                         // TODO: This banner can be deleted in March 2027. Check the commit for other places to cleanup.
-                        if showFatProteinOrderBanner {
+                        if showAdvancedMealOptions && showFatProteinOrderBanner {
                             HStack {
                                 Image(systemName: "arrow.left.arrow.right")
                                 Text("The order of Fat and Protein inputs has changed.").font(.callout)
@@ -238,7 +249,30 @@ struct MealView: View {
                             }
                         )
 
-                        if mealWithFatProtein.value || advisorDraft != nil {
+                        // Always display both entry fields, regardless of Advanced settings.
+                        HKQuantityInputView(
+                            label: "Bolus Amount",
+                            quantity: $bolusAmount,
+                            unit: .internationalUnit(),
+                            maxLength: 4,
+                            minValue: HKQuantity(unit: .internationalUnit(), doubleValue: 0),
+                            maxValue: maxBolus.value,
+                            isFocused: $bolusFieldIsFocused,
+                            onValidationError: { message in
+                                handleValidationError(message)
+                            }
+                        )
+                        Button(showAdvancedMealOptions ? "Hide extra options" : "More options") {
+                            showAdvancedMealOptions.toggle()
+                        }
+                        .accessibilityIdentifier("meal-toggle-extra-options")
+                        if !showAdvancedMealOptions,
+                           let state = currentPostMealSMBStatus, state.enabled {
+                            Text("SMBs currently blocked after meals: check More options")
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
+                        }
+                        if (showAdvancedMealOptions && mealWithFatProtein.value) || advisorDraft != nil {
                             HKQuantityInputView(
                                 label: "Fat",
                                 quantity: $fat,
@@ -266,22 +300,9 @@ struct MealView: View {
                             )
                         }
 
-                        if mealWithBolus.value || advisorDraft != nil {
-                            HKQuantityInputView(
-                                label: "Bolus Amount",
-                                quantity: $bolusAmount,
-                                unit: .internationalUnit(),
-                                maxLength: 4,
-                                minValue: HKQuantity(unit: .internationalUnit(), doubleValue: 0),
-                                maxValue: maxBolus.value,
-                                isFocused: $bolusFieldIsFocused,
-                                onValidationError: { message in
-                                    handleValidationError(message)
-                                }
-                            )
-                        }
                     }
 
+                    if showAdvancedMealOptions || isScheduling {
                     Section(header: Text("Schedule")) {
                         Toggle("Schedule for later", isOn: $isScheduling).disabled(advisorDraft != nil)
                         if isScheduling {
@@ -299,6 +320,7 @@ struct MealView: View {
                                 Text("Note: The meal will be scheduled, but the bolus is enacted immediately.")
                             }
                         }
+                    }
                     }
                 }
                 .disabled(isLoading || isAuthenticating)
@@ -458,7 +480,7 @@ struct MealView: View {
                     )
                 case .statusSuccess:
                     return Alert(
-                        title: Text("Command Sent"),
+                        title: Text("Request Submitted"),
                         message: Text(statusMessage ?? ""),
                         dismissButton: .default(Text("OK"), action: {
                             presentationMode.wrappedValue.dismiss()
@@ -576,7 +598,7 @@ struct MealView: View {
                     }
                     statusMessage = isSmartMeal
                         ? "Request sent. Waiting for Trio to confirm meal entries and upfront bolus initiation. Nothing is confirmed by APNs acceptance alone."
-                        : RemoteCommandMessage.sent
+                        : "Request submitted, not confirmed delivered. Check Trio/Nightscout before any repeat bolus."
                     LogManager.shared.log(
                         category: .apns,
                         message: "sendMealPushNotification succeeded - Carbs: \(carbs.doubleValue(for: .gram())) g, Protein: \(protein.doubleValue(for: .gram())) g, Fat: \(fat.doubleValue(for: .gram())) g, Bolus: \(bolusAmount.doubleValue(for: .internationalUnit())) U, Scheduled: \(scheduledDate != nil ? formatDate(scheduledDate!) : "now")"
@@ -586,6 +608,7 @@ struct MealView: View {
                     carbs = HKQuantity(unit: .gram(), doubleValue: 0.0)
                     protein = HKQuantity(unit: .gram(), doubleValue: 0.0)
                     fat = HKQuantity(unit: .gram(), doubleValue: 0.0)
+                    bolusAmount = HKQuantity(unit: .internationalUnit(), doubleValue: 0.0)
                     selectedTime = nil
                     isScheduling = false
                     alertType = .statusSuccess
