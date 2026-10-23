@@ -15,11 +15,11 @@ struct CarnivalFoodGuideView: View {
     private let catalog: Result<CarnivalFoodCatalog, Error>
     private let use: (CarnivalMeal) -> Void
 
-    init(initialMeal: CarnivalMeal? = nil, catalog: Result<CarnivalFoodCatalog, Error> = CarnivalFoodCatalog.bundled, use: @escaping (CarnivalMeal) -> Void) {
+    init(initialMeal: CarnivalMeal? = nil, initialTab: Int = 0, catalog: Result<CarnivalFoodCatalog, Error> = CarnivalFoodCatalog.bundled, use: @escaping (CarnivalMeal) -> Void) {
         self.catalog = catalog
         self.use = use
         _items = State(initialValue: initialMeal?.items ?? [])
-        _tab = State(initialValue: initialMeal?.items.isEmpty == false ? 2 : 0)
+        _tab = State(initialValue: (0...3).contains(initialTab) ? initialTab : 0)
     }
 
     var body: some View {
@@ -41,9 +41,10 @@ struct CarnivalFoodGuideView: View {
         Form {
             Section {
                 Picker("Food guide", selection: $tab) {
-                    Text("Quick add").tag(0)
+                    Text("Portions").tag(0)
                     Text("Search").tag(1)
-                    Text("Plate (\(items.count))").tag(2)
+                    Text("Photo").tag(2)
+                    Text("Plate (\(items.count))").tag(3)
                 }.pickerStyle(.segmented)
                 Text("Offline guide · \(guide.foods.count) foods. All nutrition values are estimates; check the listed portion.")
                     .font(.footnote).foregroundStyle(.secondary)
@@ -52,13 +53,19 @@ struct CarnivalFoodGuideView: View {
                 quickSections(guide)
             } else if tab == 1 {
                 searchSections(guide)
+            } else if tab == 2 {
+                photoSections()
             } else {
                 plateSections(guide)
             }
         }
         .scrollDismissesKeyboard(.interactively)
         .sheet(isPresented: $showPhotoScanner, onDismiss: {
-            if let meal = acceptedPhotoMeal { acceptedPhotoMeal = nil; use(meal); dismiss() }
+            if let meal = acceptedPhotoMeal {
+                acceptedPhotoMeal = nil
+                items = meal.items
+                tab = 3 // Review extracted foods and portions before transfer.
+            }
         }) {
             PlateScannerView(catalog: guide) { meal in acceptedPhotoMeal = meal }
         }
@@ -161,11 +168,29 @@ struct CarnivalFoodGuideView: View {
     }
 
     @ViewBuilder
-    private func searchSections(_ guide: CarnivalFoodCatalog) -> some View {
-        Section {
-            Button { showPhotoScanner = true } label: { Label("Take / upload plate photo (optional)", systemImage: "camera") }
-                .accessibilityIdentifier("carnival-photo-scanner")
+    private func photoSections() -> some View {
+        Section("Scan a plate") {
+            Label("Take a photo or choose one from Photos", systemImage: "camera.viewfinder")
+                .font(.headline)
+            Text("Review recognized foods and adjust portions before using the estimated carbs. Photos may miss sides, sauces or quantities.")
+                .font(.footnote).foregroundStyle(.secondary)
+            Button {
+                showPhotoScanner = true
+            } label: {
+                Label("Take or choose photo", systemImage: "camera.fill")
+                    .font(.headline)
+            }
+            .accessibilityIdentifier("carnival-photo-scanner")
         }
+        if !items.isEmpty {
+            Section {
+                Button("Review current plate (\(items.count) foods)") { tab = 3 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func searchSections(_ guide: CarnivalFoodCatalog) -> some View {
         Section("Search food or venue") {
             TextField("Rice, nuggets, burger…", text: $query).autocorrectionDisabled()
                 .accessibilityLabel("Search Carnival foods")
@@ -183,7 +208,7 @@ struct CarnivalFoodGuideView: View {
                         if let index = items.firstIndex(where: { $0.id == food.id }) {
                             items[index].portions += amount
                         } else { items.append(.init(food: food, portions: amount)) }
-                        tab = 2
+                        tab = 3
                     }
                 } label: { foodLabel(food) }
             }
