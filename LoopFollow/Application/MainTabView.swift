@@ -128,6 +128,8 @@ struct MainTabView: View {
             AlarmsContainerView()
         case .remote:
             RemoteContentView()
+        case .cruise:
+            CruiseAdvisorTabView()
         case .nightscout:
             NightscoutContentView()
         case .snoozer:
