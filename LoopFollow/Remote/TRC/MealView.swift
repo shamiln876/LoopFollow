@@ -47,7 +47,7 @@ struct MealView: View {
     @State private var isScheduling: Bool = false
     @State private var showFatProteinOrderBanner = false
 
-    init(initialAdvisorDraft: SmartMealDraft? = nil, initialCarbs: Double = 0) {
+    init(initialAdvisorDraft: SmartMealDraft? = nil, initialCarbs: Double = 0, initialBolus: Double? = nil) {
         _advisorDraft = State(initialValue: initialAdvisorDraft)
         if let draft = initialAdvisorDraft {
             _carbs = State(initialValue: HKQuantity(unit: .gram(), doubleValue: Double(draft.plan.immediateCarbs)))
@@ -56,6 +56,10 @@ struct MealView: View {
             _bolusAmount = State(initialValue: HKQuantity(unit: .internationalUnit(), doubleValue: draft.plan.upfrontInsulin))
         } else if initialCarbs.isFinite, initialCarbs >= 0 {
             _carbs = State(initialValue: HKQuantity(unit: .gram(), doubleValue: initialCarbs))
+            if let initialBolus, initialBolus.isFinite, initialBolus >= 0 {
+                // Still editable, subject to the same on-device send/authentication checks.
+                _bolusAmount = State(initialValue: HKQuantity(unit: .internationalUnit(), doubleValue: initialBolus))
+            }
         }
     }
 
