@@ -5,6 +5,7 @@
 // The actual command remains in MealView with authentication and confirmation.
 
 import SwiftUI
+import HealthKit
 
 struct CruiseAdvisorTabView: View {
     @State private var carbText = ""
