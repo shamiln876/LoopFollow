@@ -324,7 +324,6 @@ struct MealView: View {
 
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             guard carbs.doubleValue(for: .gram()) != 0 ||
-                                bolusAmount.doubleValue(for: .internationalUnit()) != 0 ||
                                 protein.doubleValue(for: .gram()) != 0 ||
                                 fat.doubleValue(for: .gram()) != 0
                             else {
