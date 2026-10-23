@@ -141,7 +141,10 @@ struct MealView: View {
                     }
                     }
                     if advisorUnresolved {
-                        Section("Previous advisor send needs checking") {
+                        Section {
+                            Label("Previous meal delivery needs verification", systemImage: "exclamationmark.circle")
+                                .font(.subheadline.weight(.medium))
+                            DisclosureGroup("Review request / reconcile") {
                             if SmartMealSendJournal.shared.pendingRequest(source: Storage.shared.url.value) != nil {
                                 Text("Waiting for Trio's transaction receipt. Check actual carb entries and insulin in Trio/Nightscout. For an uncertain receiver result, acknowledge the check in Trio → Settings → Remote Control. Do not repeat this meal.")
                                 Button("I checked treatments · clear expired sender attempt") {
@@ -154,9 +157,10 @@ struct MealView: View {
                                     if SmartMealSendJournal.shared.reconcile(source: Storage.shared.url.value) { advisorUnresolved = false }
                                 }
                             }
+                            }
                         }
                     }
-                    if let receipt = advisorReceipt {
+                    if showAdvancedMealOptions, let receipt = advisorReceipt {
                         Section("Trio meal result") {
                             Text(receipt.message)
                             Text("Carbs: \(receipt.request.immediateCarbs) g now · \(receipt.request.delayedCarbs) g later. No later insulin bolus.").font(.footnote)
