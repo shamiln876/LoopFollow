@@ -58,6 +58,7 @@ enum TabItem: String, CaseIterable, Codable, Identifiable {
     case home
     case alarms
     case remote
+    case cruise
     case nightscout
     case snoozer
     case treatments
@@ -70,6 +71,7 @@ enum TabItem: String, CaseIterable, Codable, Identifiable {
         case .home: return "Home"
         case .alarms: return "Alarms"
         case .remote: return "Remote"
+        case .cruise: return "Cruise"
         case .nightscout: return "Nightscout"
         case .snoozer: return "Snoozer"
         case .treatments: return "Treatments"
@@ -82,6 +84,7 @@ enum TabItem: String, CaseIterable, Codable, Identifiable {
         case .home: return "house"
         case .alarms: return "alarm"
         case .remote: return "antenna.radiowaves.left.and.right"
+        case .cruise: return "sailboat.fill"
         case .nightscout: return "safari"
         case .snoozer: return "zzz"
         case .treatments: return "cross.case"
@@ -91,7 +94,7 @@ enum TabItem: String, CaseIterable, Codable, Identifiable {
 
     /// Canonical feature order used by menus and customization screens.
     static var featureOrder: [TabItem] {
-        [.home, .alarms, .nightscout, .remote, .snoozer, .stats, .treatments]
+        [.home, .alarms, .nightscout, .remote, .cruise, .snoozer, .stats, .treatments]
     }
 
     /// Items that can be moved between tab bar and menu (all except settings which doesn't exist as a tab)
