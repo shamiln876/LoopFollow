@@ -53,9 +53,9 @@ import UIKit
                         .font(.footnote)
                     Text("Review every food and portion; sauces and hidden ingredients can be missed.").font(.footnote)
                     PhotosPicker(selection: $photo, matching: .images) { Label("Upload photo", systemImage: "photo") }
-                        .disabled(busy || !ready).accessibilityIdentifier("plate-upload")
+                        .disabled(busy).accessibilityIdentifier("plate-upload")
                     if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                        Button { camera = true } label: { Label("Take photo", systemImage: "camera") }.disabled(busy || !ready)
+                        Button { camera = true } label: { Label("Take photo", systemImage: "camera") }.disabled(busy)
                     }
                     if !usesService { Text(deviceStatus.message).font(.footnote).foregroundStyle(.secondary).accessibilityIdentifier("plate-device-status") }
                     else if !ready { Text("Your optional cloud scanner needs a service URL and token. The manual food guide remains available.").foregroundStyle(.secondary) }
@@ -79,6 +79,18 @@ import UIKit
                     if let image { Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 180).accessibilityLabel("Selected plate photo") }
                     if busy { ProgressView("Identifying foods and visible portions…") }
                     if let error { Text(error).foregroundStyle(.orange) }
+                }
+                if image != nil && items.isEmpty && !busy {
+                    Section("Use your photo") {
+                        Text("If automatic recognition is unavailable, keep the picture open and match each visible food to the catalog.")
+                            .font(.footnote)
+                        NavigationLink("Add food from photo") {
+                            PlateScanMatchView(catalog: catalog) { food in
+                                items.append(.init(label: food.name, food: food, portions: 1,
+                                                   uncertainty: "Matched manually from photo", confirmed: false, portionNeedsEntry: true))
+                            }
+                        }
+                    }
                 }
                 if !items.isEmpty {
                     Section("Review each food") {

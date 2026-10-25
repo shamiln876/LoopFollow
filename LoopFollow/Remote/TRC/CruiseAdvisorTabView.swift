@@ -10,8 +10,10 @@ import HealthKit
 struct CruiseAdvisorTabView: View {
     @State private var carbText = ""
     @State private var editedInsulin = ""
+    @State private var enteredRatioText = ""
     @State private var selectedMeal: CarnivalMeal?
     @State private var showFoodGuide = false
+    @State private var showPhotoScanner = false
     @State private var guideTab = 0
     @State private var showDetails = false
 
@@ -30,13 +32,28 @@ struct CruiseAdvisorTabView: View {
         return amount
     }
 
-    private var coverage: Double? {
-        guard let carbs, let ratio = snapshot.value?.carbRatio,
-              ratio.isFinite, ratio > 0,
-              MealReviewSnapshot.fresh(snapshot.value?.date, now: Date()),
-              snapshot.value?.ratioSource == "Trio reported"
+    // A carb-only reference remains useful when a new treatment has not yet
+    // appeared in Trio's determination; this never bypasses prefill checks.
+    private var liveRatio: Double? {
+        guard let s = snapshot.value, let ratio = s.carbRatio, ratio.isFinite, ratio > 0,
+              MealReviewSnapshot.fresh(s.date, now: Date()), s.ratioSource == "Trio reported"
         else { return nil }
-        return carbs / ratio
+        return ratio
+    }
+
+    private var referenceRatio: Double? {
+        if !enteredRatioText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            guard let r = Double(enteredRatioText.replacingOccurrences(of: ",", with: ".")),
+                  r.isFinite, (1 ... 200).contains(r) else { return nil }
+            return r
+        }
+        return liveRatio
+    }
+
+    private var coverage: Double? {
+        guard let carbs, let ratio = referenceRatio else { return nil }
+        let units = carbs / ratio
+        return units.isFinite ? units : nil
     }
 
     /// A candidate is shown only with a current Trio calculation, effective ISF,
@@ -84,7 +101,8 @@ struct CruiseAdvisorTabView: View {
                     HStack(spacing: 8) {
                         Button("Portions") { editingField = false; guideTab = 0; showFoodGuide = true }
                         Button("Search") { editingField = false; guideTab = 1; showFoodGuide = true }
-                        Button("Photo") { editingField = false; guideTab = 2; showFoodGuide = true }
+                        Button("Photo") { editingField = false; showPhotoScanner = true }
+                            .accessibilityIdentifier("cruise-scan-photo")
                     }
                     .buttonStyle(.bordered)
                     if let selectedMeal {
@@ -107,13 +125,29 @@ struct CruiseAdvisorTabView: View {
                 }
 
                 Section("Insulin estimate") {
-                    if let coverage {
+                    HStack {
+                        Text("Carb ratio 1:")
+                        Spacer()
+                        TextField(liveRatio.map { String(format: "%.1f", $0) } ?? "Enter CR", text: $enteredRatioText)
+                            .keyboardType(.decimalPad)
+                            .focused($editingField)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 115)
+                            .accessibilityIdentifier("cruise-carb-ratio")
+                    }
+                    if let coverage, let ratio = referenceRatio {
                         HStack {
-                            Text("Carbs ÷ active CR")
+                            Text("Carb coverage · 1:\(String(format: "%.1f", ratio))")
                             Spacer()
                             Text(String(format: "%.2f U", coverage))
+                                .font(.title3.weight(.medium))
                                 .monospacedDigit()
                         }
+                        Text("Carb-only estimate, before IOB or glucose adjustments.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("Enter his current CR to see carb coverage.")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                     HStack {
                         Text("Trio-adjusted estimate")
@@ -144,7 +178,7 @@ struct CruiseAdvisorTabView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     if calculatedBolus == nil {
-                        Text("Live calculation unavailable. You can enter an amount manually and review it in Meal. No automatic dose was guessed.")
+                        Text("Trio is updating its calculation. Carb coverage remains visible; enter the amount you choose to review it in Meal.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -196,12 +230,28 @@ struct CruiseAdvisorTabView: View {
             }
             .sheet(isPresented: $showFoodGuide) {
                 CarnivalFoodGuideView(initialMeal: selectedMeal, initialTab: guideTab) { meal in
-                    selectedMeal = meal
-                    if let total = meal.carbsForReview { carbText = String(Int(total.rounded())) }
-                    editedInsulin = ""
+                    acceptFoodMeal(meal)
                     showFoodGuide = false
                 }
             }
+            .sheet(isPresented: $showPhotoScanner) {
+                switch CarnivalFoodCatalog.bundled {
+                case let .success(catalog):
+                    PlateScannerView(catalog: catalog) { meal in
+                        acceptFoodMeal(meal)
+                        showPhotoScanner = false
+                    }
+                case .failure:
+                    Text("Food catalog unavailable. Enter the meal manually.").padding()
+                }
+            }
         }
+    }
+
+    private func acceptFoodMeal(_ meal: CarnivalMeal) {
+        guard let total = meal.carbsForReview else { return }
+        selectedMeal = meal
+        carbText = String(Int(total.rounded()))
+        editedInsulin = ""
     }
 }
