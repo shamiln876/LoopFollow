@@ -47,10 +47,7 @@ struct CruiseAdvisorTabView: View {
                                             samples: samples.value,
                                             newestTreatment: newestTreatment.value,
                                             now: now).isEmpty,
-              let result = MealReviewFullCalculation.review(
-                  newCarbs: carbs, settings: savedSettings.value,
-                  snapshot: snapshot.value, source: source.value,
-                  samples: samples.value, newestTreatment: newestTreatment.value, now: now)
+              let result = MealReviewFullCalculation.review(newCarbs: carbs, settings: savedSettings.value, snapshot: snapshot.value, source: source.value, samples: samples.value, newestTreatment: newestTreatment.value, now: now)
         else { return nil }
         return result.rounded
     }
