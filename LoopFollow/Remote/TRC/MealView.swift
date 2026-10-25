@@ -8,6 +8,7 @@ import SwiftUI
 struct MealView: View {
     @Environment(\.presentationMode) private var presentationMode
     @State private var showMealReview = false
+    @State private var showCruiseAdvisor = false
     @State private var showQuickPlate = false
     @State private var showAdvancedMealOptions = false
     @State private var smbSettingMessage: String?
@@ -110,10 +111,11 @@ struct MealView: View {
             VStack {
                 Form {
                     Section {
-                        Button { showQuickPlate = true } label: {
-                            Label("Build plate by food and portion", systemImage: "square.grid.2x2")
+                        Button { showCruiseAdvisor = true } label: {
+                            Label("Smart Meal Advisor · foods, photo & insulin", systemImage: "fork.knife.circle")
+                                .font(.headline)
                         }
-                        .accessibilityIdentifier("meal-build-plate")
+                        .accessibilityIdentifier("meal-open-cruise-advisor")
                     }
                     if showAdvancedMealOptions {
                     Section {
@@ -382,6 +384,9 @@ struct MealView: View {
                 }
                 .navigationTitle("Meal")
                 .navigationBarTitleDisplayMode(.inline)
+            }
+            .sheet(isPresented: $showCruiseAdvisor) {
+                CruiseAdvisorTabView()
             }
             .sheet(isPresented: $showQuickPlate) {
                 CarnivalFoodGuideView { meal in
