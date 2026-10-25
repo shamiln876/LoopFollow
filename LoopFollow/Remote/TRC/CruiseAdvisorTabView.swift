@@ -12,6 +12,7 @@ struct CruiseAdvisorTabView: View {
     @State private var editedInsulin = ""
     @State private var selectedMeal: CarnivalMeal?
     @State private var showFoodGuide = false
+    @State private var guideTab = 0
     @State private var showDetails = false
 
     @ObservedObject private var snapshot = Observable.shared.mealReview
@@ -80,8 +81,15 @@ struct CruiseAdvisorTabView: View {
         NavigationStack {
             Form {
                 Section {
+                    HStack(spacing: 8) {
+                        Button("Portions") { guideTab = 0; showFoodGuide = true }
+                        Button("Search") { guideTab = 1; showFoodGuide = true }
+                        Button("Photo") { guideTab = 2; showFoodGuide = true }
+                    }
+                    .buttonStyle(.bordered)
                     Button {
                         editingField = false
+                        guideTab = 0
                         showFoodGuide = true
                     } label: {
                         HStack {
@@ -205,7 +213,7 @@ struct CruiseAdvisorTabView: View {
                 editedInsulin = ""
             }
             .sheet(isPresented: $showFoodGuide) {
-                CarnivalFoodGuideView(initialMeal: selectedMeal) { meal in
+                CarnivalFoodGuideView(initialMeal: selectedMeal, initialTab: guideTab) { meal in
                     selectedMeal = meal
                     if let total = meal.carbsForReview { carbText = String(Int(total.rounded())) }
                     editedInsulin = ""
