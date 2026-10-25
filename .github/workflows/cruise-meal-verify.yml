@@ -5,6 +5,9 @@ on:
   pull_request:
     branches: [feature/nearby-bluetooth-readonly]
   workflow_dispatch:
+concurrency:
+  group: cruise-meal-verify-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
