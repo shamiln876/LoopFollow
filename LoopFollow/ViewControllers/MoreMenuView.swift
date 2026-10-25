@@ -72,6 +72,9 @@ struct MoreMenuView: View {
 
     @ViewBuilder
     private var menuContent: some View {
+        Section {
+            NavigationLink("Nearby Bluetooth") { NearbyReceiverView() }
+        }
         // Settings
         Section {
             NavigationLink(value: SettingsRoute.settings) {

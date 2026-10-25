@@ -19,15 +19,27 @@ class ContactImageUpdater {
         return ContactColorOption(rawValue: rawValue)?.uiColor ?? .white
     }
 
-    private func textColor(for contactType: ContactType) -> UIColor {
+    private func textColor(for contactType: ContactType, glucose: Double? = nil) -> UIColor {
         guard contactType == .BG else { return savedTextUIColor }
         let colorMode = Storage.shared.contactColorMode.value
         // Use raw BG value in mg/dL (same units as highLine/lowLine)
-        let bgNumeric = Double(Observable.shared.bg.value ?? 0)
+        let bgNumeric = glucose ?? Double(Observable.shared.bg.value ?? 0)
         return colorMode.textColor(for: bgNumeric, staticColor: savedTextUIColor)
     }
 
     func updateContactImage(bgValue: String, trend: String, delta: String, iob: String, stale: Bool) {
+        // Resolve on the caller's main-thread data path before dispatching Contacts work.
+        let nearby = NearbyLiveActivitySnapshot.select(
+            cloud: GlucoseSnapshotBuilder.build(from: StorageCurrentGlucoseStateProvider()),
+            packet: NearbyReceiver.shared.packet, enabled: NearbyReceiver.shared.enabled,
+            unit: PreferredGlucoseUnit.snapshotUnit(), now: Date()
+        )
+        let bluetooth = nearby?.nearbyExpiresAt != nil ? nearby : nil
+        let bgValue = bluetooth.map { Localizer.toDisplayUnits(String($0.glucose)) } ?? bgValue
+        let trend = bluetooth != nil ? "" : trend
+        let delta = bluetooth.map { ($0.delta >= 0 ? "+" : "") + Localizer.toDisplayUnits(String($0.delta)) } ?? delta
+        let iob = bluetooth.map { $0.iob.map { String(format: "%.2f", $0) } ?? "—" } ?? iob
+        let stale = bluetooth.map { Date().timeIntervalSince1970 >= ($0.nearbyExpiresAt ?? 0) } ?? stale
         queue.async {
             guard CNContactStore.authorizationStatus(for: .contacts) == .authorized else {
                 LogManager.shared.log(category: .contact, message: "Access to contacts is not authorized.")
@@ -53,7 +65,7 @@ class ContactImageUpdater {
 
                 let includedFields = self.getIncludedFields(for: contactType)
 
-                let dynamicTextColor = self.textColor(for: contactType)
+                let dynamicTextColor = self.textColor(for: contactType, glucose: bluetooth?.glucose)
 
                 guard let imageData = self.generateContactImage(bgValue: bgValue, trend: trend, delta: delta, iob: iob, stale: stale, contactType: contactType, includedFields: includedFields, textColor: dynamicTextColor)?.pngData() else {
                     LogManager.shared.log(category: .contact, message: "Failed to generate contact image for \(contactName).")
