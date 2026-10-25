@@ -279,20 +279,18 @@ struct MealView: View {
                             )
                         }
 
-                        if maxBolus.value.doubleValue(for: .internationalUnit()) >= 0 {
-                            HKQuantityInputView(
-                                label: "Bolus Amount",
-                                quantity: $bolusAmount,
-                                unit: .internationalUnit(),
-                                maxLength: 4,
-                                minValue: HKQuantity(unit: .internationalUnit(), doubleValue: 0),
-                                maxValue: maxBolus.value,
-                                isFocused: $bolusFieldIsFocused,
-                                onValidationError: { message in
-                                    handleValidationError(message)
-                                }
-                            )
-                        }
+                        HKQuantityInputView(
+                            label: "Bolus Amount",
+                            quantity: $bolusAmount,
+                            unit: .internationalUnit(),
+                            maxLength: 4,
+                            minValue: HKQuantity(unit: .internationalUnit(), doubleValue: 0),
+                            maxValue: maxBolus.value,
+                            isFocused: $bolusFieldIsFocused,
+                            onValidationError: { message in
+                                handleValidationError(message)
+                            }
+                        )
                         Button(showAdvancedMealOptions ? "Hide additional controls" : "More options") {
                             showAdvancedMealOptions.toggle()
                         }
