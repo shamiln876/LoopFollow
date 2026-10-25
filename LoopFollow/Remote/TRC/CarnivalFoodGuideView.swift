@@ -19,7 +19,7 @@ struct CarnivalFoodGuideView: View {
         self.catalog = catalog
         self.use = use
         _items = State(initialValue: initialMeal?.items ?? [])
-        _tab = State(initialValue: (0...3).contains(initialTab) ? initialTab : 0)
+        _tab = State(initialValue: (0 ... 3).contains(initialTab) ? initialTab : 0)
     }
 
     var body: some View {
