@@ -8,6 +8,8 @@ import SwiftUI
 struct MealView: View {
     @Environment(\.presentationMode) private var presentationMode
     @State private var showMealReview = false
+    @State private var showQuickPlate = false
+    @State private var showAdvancedMealOptions = false
     @State private var smbSettingMessage: String?
     @State private var smbSettingSending = false
     @State private var pendingSMBSetting: UUID?
@@ -46,7 +48,7 @@ struct MealView: View {
     @State private var isScheduling: Bool = false
     @State private var showFatProteinOrderBanner = false
 
-    init(initialAdvisorDraft: SmartMealDraft? = nil, initialCarbs: Double = 0) {
+    init(initialAdvisorDraft: SmartMealDraft? = nil, initialCarbs: Double = 0, initialBolus: Double? = nil) {
         _advisorDraft = State(initialValue: initialAdvisorDraft)
         if let draft = initialAdvisorDraft {
             _carbs = State(initialValue: HKQuantity(unit: .gram(), doubleValue: Double(draft.plan.immediateCarbs)))
@@ -55,6 +57,9 @@ struct MealView: View {
             _bolusAmount = State(initialValue: HKQuantity(unit: .internationalUnit(), doubleValue: draft.plan.upfrontInsulin))
         } else if initialCarbs.isFinite, initialCarbs >= 0 {
             _carbs = State(initialValue: HKQuantity(unit: .gram(), doubleValue: initialCarbs))
+            if let initialBolus, initialBolus.isFinite, initialBolus >= 0 {
+                _bolusAmount = State(initialValue: HKQuantity(unit: .internationalUnit(), doubleValue: initialBolus))
+            }
         }
     }
 
@@ -104,6 +109,13 @@ struct MealView: View {
             VStack {
                 Form {
                     Section {
+                        Button { showQuickPlate = true } label: {
+                            Label("Choose foods and portions", systemImage: "square.grid.2x2")
+                        }
+                        .accessibilityIdentifier("meal-build-plate")
+                    }
+                    if showAdvancedMealOptions {
+                    Section {
                         Button("Smart Meal Advisor") { showMealReview = true }
                             .accessibilityIdentifier("meal-open-advisor")
                     }
@@ -132,6 +144,7 @@ struct MealView: View {
                             Text("Updated Trio with a fresh paired status is required. Block status is unconfirmed.")
                         }
                         if let smbSettingMessage { Text(smbSettingMessage).font(.footnote) }
+                    }
                     }
                     if advisorUnresolved {
                         Section("Previous advisor send needs checking") {
@@ -172,7 +185,7 @@ struct MealView: View {
                             }
                         }
                     }
-                    if !quickPickMeals.quickPickMeals.isEmpty {
+                    if showAdvancedMealOptions && !quickPickMeals.quickPickMeals.isEmpty {
                         Section(header: QuickPickSectionHeader(title: "Quick-Pick Meals", infoText: QuickPickSectionHeader.mealInfoText)) {
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 12) {
@@ -208,7 +221,7 @@ struct MealView: View {
 
                     Section(header: Text("Meal Data")) {
                         // TODO: This banner can be deleted in March 2027. Check the commit for other places to cleanup.
-                        if showFatProteinOrderBanner {
+                        if showAdvancedMealOptions && showFatProteinOrderBanner {
                             HStack {
                                 Image(systemName: "arrow.left.arrow.right")
                                 Text("The order of Fat and Protein inputs has changed.").font(.callout)
@@ -238,7 +251,7 @@ struct MealView: View {
                             }
                         )
 
-                        if mealWithFatProtein.value || advisorDraft != nil {
+                        if (showAdvancedMealOptions && mealWithFatProtein.value) || advisorDraft != nil {
                             HKQuantityInputView(
                                 label: "Fat",
                                 quantity: $fat,
@@ -266,7 +279,7 @@ struct MealView: View {
                             )
                         }
 
-                        if mealWithBolus.value || advisorDraft != nil {
+                        if maxBolus.value.doubleValue(for: .internationalUnit()) >= 0 {
                             HKQuantityInputView(
                                 label: "Bolus Amount",
                                 quantity: $bolusAmount,
@@ -280,8 +293,17 @@ struct MealView: View {
                                 }
                             )
                         }
+                        Button(showAdvancedMealOptions ? "Hide additional controls" : "More options") {
+                            showAdvancedMealOptions.toggle()
+                        }
+                        .font(.footnote)
+                        if !showAdvancedMealOptions, let state = currentPostMealSMBStatus, state.enabled {
+                            Text("Trio currently blocks SMB for 30 minutes after meals")
+                                .font(.footnote).foregroundStyle(.orange)
+                        }
                     }
 
+                    if showAdvancedMealOptions || isScheduling {
                     Section(header: Text("Schedule")) {
                         Toggle("Schedule for later", isOn: $isScheduling).disabled(advisorDraft != nil)
                         if isScheduling {
@@ -299,6 +321,7 @@ struct MealView: View {
                                 Text("Note: The meal will be scheduled, but the bolus is enacted immediately.")
                             }
                         }
+                    }
                     }
                 }
                 .disabled(isLoading || isAuthenticating)
@@ -342,6 +365,19 @@ struct MealView: View {
                 }
                 .navigationTitle("Meal")
                 .navigationBarTitleDisplayMode(.inline)
+            }
+            .sheet(isPresented: $showQuickPlate) {
+                CarnivalFoodGuideView { meal in
+                    guard let amount = meal.carbsForReview,
+                          amount > 0, amount <= maxCarbs.value.doubleValue(for: .gram()) else { return }
+                    advisorDraft = nil
+                    carbs = HKQuantity(unit: .gram(), doubleValue: amount)
+                    bolusAmount = HKQuantity(unit: .internationalUnit(), doubleValue: 0)
+                    protein = HKQuantity(unit: .gram(), doubleValue: 0)
+                    fat = HKQuantity(unit: .gram(), doubleValue: 0)
+                    selectedTime = nil
+                    isScheduling = false
+                }
             }
             .sheet(isPresented: $showMealReview) {
                 MealReviewView(initialCarbs: advisorDraft.map { Double($0.plan.immediateCarbs + $0.plan.delayedCarbs) } ?? carbs.doubleValue(for: .gram()), initialBolus: advisorDraft.flatMap { draft in
