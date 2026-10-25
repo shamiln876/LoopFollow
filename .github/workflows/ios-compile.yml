@@ -1,0 +1,40 @@
+name: LoopFollow iOS compile check
+
+on:
+  pull_request:
+    branches:
+      - fix/home-info-cr-visible
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-simulator:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Install CocoaPods
+        run: |
+          if ! command -v pod >/dev/null; then
+            sudo gem install cocoapods --no-document
+          fi
+          pod install
+      - name: Compile LoopFollow (unsigned, simulator)
+        run: |
+          set -o pipefail
+          xcodebuild -workspace LoopFollow.xcworkspace \
+            -scheme LoopFollow \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tee xcodebuild.log
+      - name: Attach log if build fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-compile-log
+          path: xcodebuild.log
