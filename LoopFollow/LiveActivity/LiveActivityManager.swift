@@ -1009,7 +1009,16 @@ final class LiveActivityManager {
             highMgdl: Storage.shared.highLine.value,
         )
         GlucoseSnapshotStore.shared.save(snapshot)
-        // WatchConnectivityManager.shared.send(snapshot: snapshot)
+        // Refresh the existing Contacts-based watch display from the same source.
+        if Storage.shared.contactEnabled.value {
+            ContactImageUpdater().updateContactImage(
+                bgValue: Observable.shared.bgText.value,
+                trend: Observable.shared.directionText.value,
+                delta: Observable.shared.deltaText.value,
+                iob: Observable.shared.iobText.value,
+                stale: Observable.shared.bgStale.value
+            )
+        }
 
         // LA update: gated on LA being active, snapshot having changed, and activities enabled.
         if !Storage.shared.laEnabled.value {
