@@ -8,6 +8,8 @@ on:
     # run on the new base and the PR stays blocked indefinitely.
     types: [opened, synchronize, reopened, edited]
   workflow_dispatch:
+  push:
+    branches: [fix/meal-advisor-icr-fallback-20261025]
 
 concurrency:
   group: lint-${{ github.ref }}

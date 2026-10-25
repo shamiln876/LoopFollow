@@ -1,6 +1,8 @@
 name: Optional plate scanner tests
 on:
   workflow_dispatch:
+  push:
+    branches: [fix/meal-advisor-icr-fallback-20261025]
   pull_request:
     paths:
       - 'LoopFollow/Remote/TRC/PlateScan*'
