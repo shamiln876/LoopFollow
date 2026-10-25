@@ -906,16 +906,8 @@ final class LiveActivityManager {
             message: "[LA] push-to-start (\(reason)) APNs round-trip result=\(result) elapsed=\(elapsedMs)ms"
         )
 
-        // End the old activity only after a confirmed successful send — if the
-        // send fails the user keeps their existing LA rather than losing data
-        // with nothing to replace it.
-        if result == .success, let oldActivity {
-            LogManager.shared.log(
-                category: .general,
-                message: "[LA] push-to-start (\(reason)) send succeeded — ending oldActivity=\(oldActivity.id)"
-            )
-            await oldActivity.end(nil, dismissalPolicy: .immediate)
-        }
+        // APNs acceptance does not prove that iOS created a replacement.
+        // adoptPushToStartActivity ends the old card only after observing the new one.
 
         await MainActor.run {
             self.handlePushToStartResult(result, reason: reason)
@@ -1000,8 +992,6 @@ final class LiveActivityManager {
             "cob=\(snapshot.cob?.description ?? "nil") proj=\(snapshot.projected?.description ?? "nil") u=\(snapshot.unit.rawValue)"
         LogManager.shared.log(category: .general, message: "[LA] snapshot \(fingerprint) reason=\(reason)", isDebug: true)
 
-        // Check if the Live Activity is approaching Apple's 8-hour limit and renew if so.
-        if renewIfNeeded(snapshot: snapshot) { return }
 
         if snapshot.showRenewalOverlay {
             LogManager.shared.log(category: .general, message: "[LA] sending update with renewal overlay visible")
@@ -1030,7 +1020,6 @@ final class LiveActivityManager {
             LogManager.shared.log(category: .general, message: "[LA] refresh: LA update skipped — dismissedByUser=true reason=\(reason)")
             return
         }
-        guard !snapshotUnchanged || forceRefreshNeeded else { return }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             LogManager.shared.log(category: .general, message: "[LA] refresh: LA update skipped — areActivitiesEnabled=false reason=\(reason)")
             return
@@ -1044,8 +1033,15 @@ final class LiveActivityManager {
             // into a misclassified user swipe.
             bind(to: existing, logReason: "bind-existing")
         }
-        if let _ = current {
-            update(snapshot: snapshot, reason: reason)
+        if let activity = current, activity.activityState == .ended || activity.activityState == .dismissed {
+            current = nil
+        }
+        if current != nil {
+            // Keep delivering readings while a replacement is pending or offline.
+            _ = renewIfNeeded(snapshot: snapshot)
+            if !snapshotUnchanged || forceRefreshNeeded {
+                update(snapshot: snapshot, reason: reason)
+            }
             return
         }
         if isAppVisibleForLiveActivityStart() {
@@ -1056,7 +1052,11 @@ final class LiveActivityManager {
                 }
             }
         } else {
-            LogManager.shared.log(category: .general, message: "LA start suppressed (not visible) reason=\(reason)", isDebug: true)
+            // Recover a system-ended activity during background execution too.
+            // The creation path retains authorization, dismissal and APNs backoff guards.
+            Task { @MainActor in
+                self.attemptPushToStartCreate(reason: "recover-missing", oldActivity: nil, snapshot: snapshot)
+            }
         }
     }
 
