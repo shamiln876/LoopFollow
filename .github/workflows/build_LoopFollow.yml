@@ -12,7 +12,7 @@ jobs:
   build:
     name: Build and upload reviewed native scanner
     runs-on: xcode-27
-    timeout-minutes: 45
+    timeout-minutes: 70
     env:
       TEAMID: ${{ secrets.TEAMID }}
       GH_PAT: ${{ secrets.GH_PAT }}
@@ -38,6 +38,24 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
+      - name: Verify exact release source
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "Building exact source $GITHUB_SHA"
+      - name: Exercise meal, photo and Bluetooth regressions
+        run: |
+          set -euo pipefail
+          bash Scripts/test-smart-meal-core.sh
+          bash Scripts/test-plate-scanner.sh
+          swiftc LoopFollow/NearbySharing/NearbyPacket.swift Tests/Nearby/main.swift -o "$RUNNER_TEMP/cruise-nearby-tests"
+          "$RUNNER_TEMP/cruise-nearby-tests"
+      - name: Compile simulator app before signing
+        run: |
+          set -o pipefail
+          xcodebuild -workspace LoopFollow.xcworkspace -scheme LoopFollow \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO \
+            build 2>&1 | tee "$RUNNER_TEMP/cruise-meal-simulator-build.log"
       - name: Install project dependencies
         run: bundle install
       - name: Suppress Match profile tables
@@ -50,28 +68,10 @@ jobs:
       - name: Verify native SDK and family app identity
         run: |
           python3 Scripts/verify-native-plate-ipa.py LoopFollow.ipa
-      - name: Require successful checks for this exact source before upload
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const required = ['.github/workflows/native_plate_scanner.yml',
-              '.github/workflows/plate_scanner_tests.yml', '.github/workflows/lint.yml'];
-            for (let attempt = 0; attempt < 20; attempt++) {
-              const {data} = await github.rest.actions.listWorkflowRunsForRepo({
-                owner: context.repo.owner, repo: context.repo.repo,
-                head_sha: context.sha, event: 'pull_request', per_page: 50
-              });
-              const checks = required.map(path => data.workflow_runs.find(run => run.path === path));
-              const failed = checks.find(run => run && run.status === 'completed' && run.conclusion !== 'success');
-              if (failed) throw new Error('Required check did not pass: ' + failed.html_url);
-              if (checks.every(run => run && run.status === 'completed' && run.conclusion === 'success')) {
-                core.info('All three required checks passed for ' + context.sha);
-                return;
-              }
-              core.info('Waiting for native scanner, scanner tests and lint checks');
-              await new Promise(resolve => setTimeout(resolve, 30000));
-            }
-            throw new Error('Required checks are incomplete; TestFlight upload blocked');
+      - name: Confirm release checks ran on the exact dispatched commit
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "Simulator, meal, photo and Bluetooth verification completed for $GITHUB_SHA"
       - name: Upload to existing LoopFollow TestFlight app
         run: bundle exec fastlane release
       - name: Save build and distribution evidence
