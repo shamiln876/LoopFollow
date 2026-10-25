@@ -207,6 +207,7 @@ extension Storage {
         case .home: return homePosition.exists
         case .alarms: return alarmsPosition.exists
         case .remote: return remotePosition.exists
+        case .cruise: return cruisePosition.exists
         case .nightscout: return nightscoutPosition.exists
         case .snoozer: return snoozerPosition.exists
         case .stats: return statisticsPosition.exists
