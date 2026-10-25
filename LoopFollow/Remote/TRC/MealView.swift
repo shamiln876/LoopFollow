@@ -115,36 +115,36 @@ struct MealView: View {
                         .accessibilityIdentifier("meal-build-plate")
                     }
                     if showAdvancedMealOptions {
-                    Section {
-                        Button("Smart Meal Advisor") { showMealReview = true }
-                            .accessibilityIdentifier("meal-open-advisor")
-                    }
-                    Section("Post-meal SMB block") {
-                        if let state = currentPostMealSMBStatus {
-                            Toggle("Block SMB for 30 minutes after meals", isOn: Binding(
-                                get: { state.enabled },
-                                set: { sendPostMealSMBSetting(enabled: $0, revision: state.revision) }
-                            ))
-                            .disabled(smbSettingSending)
-                            .accessibilityIdentifier("post-meal-smb-toggle")
-                            Text("Trio reports: \(state.enabled ? "enabled" : "disabled"). Basal and manual boluses continue.").font(.footnote)
-                            if state.enabled, let until = state.blockedUntil, until > Date().timeIntervalSince1970 {
-                                Text("SMBs blocked until \(Date(timeIntervalSince1970: until), style: .time)")
-                                    .font(.footnote)
-                                    .accessibilityIdentifier("post-meal-smb-until")
-                            } else {
-                                Text("No active post-meal block reported.").font(.footnote)
-                            }
-                            if let pendingSMBSetting, state.revision == pendingSMBSetting.uuidString {
-                                Text("Trio confirmed the setting.").font(.footnote)
-                            } else if pendingSMBSetting != nil {
-                                Text("Waiting for Trio confirmation. The reported setting above remains authoritative.").font(.footnote)
-                            }
-                        } else {
-                            Text("Updated Trio with a fresh paired status is required. Block status is unconfirmed.")
+                        Section {
+                            Button("Smart Meal Advisor") { showMealReview = true }
+                                .accessibilityIdentifier("meal-open-advisor")
                         }
-                        if let smbSettingMessage { Text(smbSettingMessage).font(.footnote) }
-                    }
+                        Section("Post-meal SMB block") {
+                            if let state = currentPostMealSMBStatus {
+                                Toggle("Block SMB for 30 minutes after meals", isOn: Binding(
+                                    get: { state.enabled },
+                                    set: { sendPostMealSMBSetting(enabled: $0, revision: state.revision) }
+                                ))
+                                .disabled(smbSettingSending)
+                                .accessibilityIdentifier("post-meal-smb-toggle")
+                                Text("Trio reports: \(state.enabled ? "enabled" : "disabled"). Basal and manual boluses continue.").font(.footnote)
+                                if state.enabled, let until = state.blockedUntil, until > Date().timeIntervalSince1970 {
+                                    Text("SMBs blocked until \(Date(timeIntervalSince1970: until), style: .time)")
+                                        .font(.footnote)
+                                        .accessibilityIdentifier("post-meal-smb-until")
+                                } else {
+                                    Text("No active post-meal block reported.").font(.footnote)
+                                }
+                                if let pendingSMBSetting, state.revision == pendingSMBSetting.uuidString {
+                                    Text("Trio confirmed the setting.").font(.footnote)
+                                } else if pendingSMBSetting != nil {
+                                    Text("Waiting for Trio confirmation. The reported setting above remains authoritative.").font(.footnote)
+                                }
+                            } else {
+                                Text("Updated Trio with a fresh paired status is required. Block status is unconfirmed.")
+                            }
+                            if let smbSettingMessage { Text(smbSettingMessage).font(.footnote) }
+                        }
                     }
                     if advisorUnresolved {
                         Section("Previous advisor send needs checking") {
@@ -302,24 +302,24 @@ struct MealView: View {
                     }
 
                     if showAdvancedMealOptions || isScheduling {
-                    Section(header: Text("Schedule")) {
-                        Toggle("Schedule for later", isOn: $isScheduling).disabled(advisorDraft != nil)
-                        if isScheduling {
-                            DatePicker(
-                                "Select Time",
-                                selection: Binding(
-                                    get: { self.selectedTime ?? Date() },
-                                    set: { self.selectedTime = $0 }
-                                ),
-                                displayedComponents: .hourAndMinute
-                            )
-                            .datePickerStyle(CompactDatePickerStyle())
+                        Section(header: Text("Schedule")) {
+                            Toggle("Schedule for later", isOn: $isScheduling).disabled(advisorDraft != nil)
+                            if isScheduling {
+                                DatePicker(
+                                    "Select Time",
+                                    selection: Binding(
+                                        get: { self.selectedTime ?? Date() },
+                                        set: { self.selectedTime = $0 }
+                                    ),
+                                    displayedComponents: .hourAndMinute
+                                )
+                                .datePickerStyle(CompactDatePickerStyle())
 
-                            if bolusAmount.doubleValue(for: .internationalUnit()) > 0 {
-                                Text("Note: The meal will be scheduled, but the bolus is enacted immediately.")
+                                if bolusAmount.doubleValue(for: .internationalUnit()) > 0 {
+                                    Text("Note: The meal will be scheduled, but the bolus is enacted immediately.")
+                                }
                             }
                         }
-                    }
                     }
                 }
                 .disabled(isLoading || isAuthenticating)
