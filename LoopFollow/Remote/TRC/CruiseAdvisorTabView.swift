@@ -82,29 +82,11 @@ struct CruiseAdvisorTabView: View {
             Form {
                 Section {
                     HStack(spacing: 8) {
-                        Button("Portions") { guideTab = 0; showFoodGuide = true }
-                        Button("Search") { guideTab = 1; showFoodGuide = true }
-                        Button("Photo") { guideTab = 2; showFoodGuide = true }
+                        Button("Portions") { editingField = false; guideTab = 0; showFoodGuide = true }
+                        Button("Search") { editingField = false; guideTab = 1; showFoodGuide = true }
+                        Button("Photo") { editingField = false; guideTab = 2; showFoodGuide = true }
                     }
                     .buttonStyle(.bordered)
-                    Button {
-                        editingField = false
-                        guideTab = 0
-                        showFoodGuide = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "fork.knife.circle.fill")
-                                .font(.title2)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Choose what he's eating").font(.headline)
-                                Text("Carnival foods, portions, or plate photo")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.caption)
-                        }
-                    }
-                    .accessibilityIdentifier("cruise-select-food")
                     if let selectedMeal {
                         Text("Selected foods: \(selectedMeal.items.count)")
                             .font(.caption).foregroundStyle(.secondary)
