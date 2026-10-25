@@ -1,11 +1,8 @@
 // LoopFollow
 // CruiseAdvisorTabView.swift
-//
-// Food-first caregiver support. No bolus or pump action occurs in this view.
-// The actual command remains in MealView with authentication and confirmation.
 
-import SwiftUI
 import HealthKit
+import SwiftUI
 
 struct CruiseAdvisorTabView: View {
     @State private var carbText = ""
@@ -51,9 +48,9 @@ struct CruiseAdvisorTabView: View {
                                             newestTreatment: newestTreatment.value,
                                             now: now).isEmpty,
               let result = MealReviewFullCalculation.review(
-                newCarbs: carbs, settings: savedSettings.value,
-                snapshot: snapshot.value, source: source.value,
-                samples: samples.value, newestTreatment: newestTreatment.value, now: now)
+                  newCarbs: carbs, settings: savedSettings.value,
+                  snapshot: snapshot.value, source: source.value,
+                  samples: samples.value, newestTreatment: newestTreatment.value, now: now)
         else { return nil }
         return result.rounded
     }
@@ -138,8 +135,7 @@ struct CruiseAdvisorTabView: View {
                             .accessibilityIdentifier("cruise-upfront-insulin")
                         Text("U").foregroundStyle(.secondary)
                     }
-                    if let proposed = chosenBolus,
-                       let max = savedSettings.value?.maxBolus, proposed >= max {
+                    if let proposed = chosenBolus, let max = savedSettings.value?.maxBolus, proposed >= max {
                         Text("The Trio estimate may be capped at the current maximum bolus. Carb coverage is not the same as insulin actually delivered.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
@@ -187,9 +183,7 @@ struct CruiseAdvisorTabView: View {
             .navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: carbText) { _, newValue in
-                if let selectedMeal,
-                   let total = selectedMeal.carbsForReview,
-                   Double(newValue) != total.rounded() {
+                if let selectedMeal, let total = selectedMeal.carbsForReview, Double(newValue) != total.rounded() {
                     self.selectedMeal = nil
                 }
                 // Preserve an explicitly entered insulin amount while carbs are edited.
