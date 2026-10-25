@@ -192,7 +192,8 @@ struct CruiseAdvisorTabView: View {
                    Double(newValue) != total.rounded() {
                     self.selectedMeal = nil
                 }
-                editedInsulin = ""
+                // Preserve an explicitly entered insulin amount while carbs are edited.
+                // The final Meal confirmation still displays both values.
             }
             .sheet(isPresented: $showFoodGuide) {
                 CarnivalFoodGuideView(initialMeal: selectedMeal, initialTab: guideTab) { meal in
