@@ -1,6 +1,9 @@
 name: 4. Build LoopFollow
 run-name: Build native plate scanner (${{ github.ref_name }})
 on:
+  push:
+    branches: [feature/cruise-meal-safe-20261025]
+    paths: [.github/workflows/build_LoopFollow.yml]
   workflow_dispatch:
 permissions:
   contents: read
