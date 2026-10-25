@@ -1,6 +1,9 @@
 name: LoopFollow iOS compile check
 
 on:
+  push:
+    branches:
+      - feature/simple-cruise-meal-entry-20261023
   pull_request:
     branches:
       - fix/home-info-cr-visible
