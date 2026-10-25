@@ -1,0 +1,44 @@
+name: Cruise meal UI and Bluetooth verification
+on:
+  push:
+    branches: [feature/cruise-meal-safe-20261025]
+  pull_request:
+    branches: [feature/nearby-bluetooth-readonly]
+  workflow_dispatch:
+concurrency:
+  group: cruise-meal-verify-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Select Xcode
+        run: sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
+      - name: Verify unchanged Bluetooth wire protocol
+        run: |
+          swiftc LoopFollow/NearbySharing/NearbyPacket.swift Tests/Nearby/main.swift -o /tmp/cruise-nearby-test
+          /tmp/cruise-nearby-test
+      - name: Test meal and plate review code
+        run: |
+          bash Scripts/test-smart-meal-core.sh
+          bash Scripts/test-plate-scanner.sh
+      - name: Compile iOS simulator app without signing
+        run: |
+          set -o pipefail
+          xcodebuild -workspace LoopFollow.xcworkspace -scheme LoopFollow \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO \
+            build 2>&1 | tee /tmp/cruise-meal-build.log
+      - name: Save compile evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cruise-meal-compile
+          path: /tmp/cruise-meal-build.log
