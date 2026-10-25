@@ -992,7 +992,6 @@ final class LiveActivityManager {
             "cob=\(snapshot.cob?.description ?? "nil") proj=\(snapshot.projected?.description ?? "nil") u=\(snapshot.unit.rawValue)"
         LogManager.shared.log(category: .general, message: "[LA] snapshot \(fingerprint) reason=\(reason)", isDebug: true)
 
-
         if snapshot.showRenewalOverlay {
             LogManager.shared.log(category: .general, message: "[LA] sending update with renewal overlay visible")
         }
